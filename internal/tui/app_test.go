@@ -132,7 +132,7 @@ func TestAppModel_ActiveSessionIndicator(t *testing.T) {
 	if len(view) == 0 {
 		t.Error("view should not be empty")
 	}
-	if !strings.Contains(view, "セッションアクティブ") {
+	if !strings.Contains(view, "ClaudeCode 稼働中") {
 		t.Errorf("view should contain active session indicator, got %q", view)
 	}
 }

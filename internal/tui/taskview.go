@@ -125,7 +125,7 @@ func (m TaskViewModel) View() string {
 
 func (m TaskViewModel) viewTasks() string {
 	if len(m.tasks) == 0 {
-		return EmptyStateStyle.Render("サブエージェントのタスクなし")
+		return EmptyStateStyle.Render("タスクなし")
 	}
 
 	var b strings.Builder

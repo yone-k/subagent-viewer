@@ -11,11 +11,10 @@ import (
 // (Defined in statsview.go)
 
 func TestStatsView_UpdateWithStats(t *testing.T) {
-	m := NewStatsViewModel("session-1")
+	m := NewStatsViewModel()
 	m.SetSize(80, 24)
 
 	stats := &claude.ProjectStats{
-		LastSessionID:         "session-1",
 		LastCost:              1.178,
 		LastDuration:          1212000,
 		LastTotalInputTokens:  150000,
@@ -29,12 +28,11 @@ func TestStatsView_UpdateWithStats(t *testing.T) {
 	}
 }
 
-func TestStatsView_SessionIDMatch(t *testing.T) {
-	m := NewStatsViewModel("session-1")
+func TestStatsView_ShowsStats(t *testing.T) {
+	m := NewStatsViewModel()
 	m.SetSize(80, 24)
 
 	stats := &claude.ProjectStats{
-		LastSessionID:         "session-1",
 		LastCost:              1.178,
 		LastDuration:          1212000,
 		LastTotalInputTokens:  150000,
@@ -44,39 +42,20 @@ func TestStatsView_SessionIDMatch(t *testing.T) {
 	m = newModel.(StatsViewModel)
 
 	view := m.View()
-	// Should show all stats without warning
-	if strings.Contains(view, "統計情報は最新セッションのみ利用可能です") {
-		t.Error("should not show warning when session IDs match")
+	if strings.Contains(view, "統計情報なし") {
+		t.Error("should not show empty state when stats are available")
 	}
 	if !strings.Contains(view, "$1.178") {
 		t.Errorf("should show cost, got:\n%s", view)
 	}
 }
 
-func TestStatsView_SessionIDMismatch(t *testing.T) {
-	m := NewStatsViewModel("different-session")
-	m.SetSize(80, 24)
-
-	stats := &claude.ProjectStats{
-		LastSessionID: "session-1",
-		LastCost:      1.178,
-	}
-	newModel, _ := m.Update(StatsUpdatedMsg{Stats: stats})
-	m = newModel.(StatsViewModel)
-
-	view := m.View()
-	if !strings.Contains(view, "統計情報は最新セッションのみ利用可能です") {
-		t.Errorf("should show warning for mismatched session IDs, got:\n%s", view)
-	}
-}
-
 func TestStatsView_DurationFormat(t *testing.T) {
-	m := NewStatsViewModel("s1")
+	m := NewStatsViewModel()
 	m.SetSize(80, 24)
 
 	stats := &claude.ProjectStats{
-		LastSessionID: "s1",
-		LastDuration:  1212000, // 20m 12s in milliseconds
+		LastDuration: 1212000, // 20m 12s in milliseconds
 	}
 	newModel, _ := m.Update(StatsUpdatedMsg{Stats: stats})
 	m = newModel.(StatsViewModel)
@@ -88,12 +67,11 @@ func TestStatsView_DurationFormat(t *testing.T) {
 }
 
 func TestStatsView_CostFormat(t *testing.T) {
-	m := NewStatsViewModel("s1")
+	m := NewStatsViewModel()
 	m.SetSize(80, 24)
 
 	stats := &claude.ProjectStats{
-		LastSessionID: "s1",
-		LastCost:      1.178,
+		LastCost: 1.178,
 	}
 	newModel, _ := m.Update(StatsUpdatedMsg{Stats: stats})
 	m = newModel.(StatsViewModel)
@@ -105,11 +83,10 @@ func TestStatsView_CostFormat(t *testing.T) {
 }
 
 func TestStatsView_TokenFormat(t *testing.T) {
-	m := NewStatsViewModel("s1")
+	m := NewStatsViewModel()
 	m.SetSize(80, 24)
 
 	stats := &claude.ProjectStats{
-		LastSessionID:         "s1",
 		LastTotalInputTokens:  150000,
 		LastTotalOutputTokens: 25000,
 	}
@@ -126,11 +103,10 @@ func TestStatsView_TokenFormat(t *testing.T) {
 }
 
 func TestStatsView_ModelBreakdown(t *testing.T) {
-	m := NewStatsViewModel("s1")
+	m := NewStatsViewModel()
 	m.SetSize(80, 24)
 
 	stats := &claude.ProjectStats{
-		LastSessionID: "s1",
 		LastModelUsage: map[string]claude.ModelUsage{
 			"claude-sonnet-4-20250514": {
 				InputTokens:  120000,
@@ -148,7 +124,7 @@ func TestStatsView_ModelBreakdown(t *testing.T) {
 }
 
 func TestStatsView_EmptyState(t *testing.T) {
-	m := NewStatsViewModel("s1")
+	m := NewStatsViewModel()
 	m.SetSize(80, 24)
 
 	view := m.View()

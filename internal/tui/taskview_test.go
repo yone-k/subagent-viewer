@@ -118,7 +118,7 @@ func TestTaskView_EmptyState(t *testing.T) {
 	m.SetSize(80, 24)
 
 	view := m.View()
-	if !strings.Contains(view, "サブエージェントのタスクなし") {
+	if !strings.Contains(view, "タスクなし") {
 		t.Errorf("empty state not shown, got:\n%s", view)
 	}
 }

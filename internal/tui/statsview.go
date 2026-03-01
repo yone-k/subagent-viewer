@@ -15,15 +15,14 @@ type StatsUpdatedMsg struct {
 
 // StatsViewModel manages the Stats tab view.
 type StatsViewModel struct {
-	sessionID string
-	stats     *claude.ProjectStats
-	width     int
-	height    int
+	stats  *claude.ProjectStats
+	width  int
+	height int
 }
 
 // NewStatsViewModel creates a new StatsViewModel.
-func NewStatsViewModel(sessionID string) StatsViewModel {
-	return StatsViewModel{sessionID: sessionID}
+func NewStatsViewModel() StatsViewModel {
+	return StatsViewModel{}
 }
 
 // SetSize updates the view dimensions.
@@ -53,12 +52,6 @@ func (m StatsViewModel) View() string {
 	}
 
 	var b strings.Builder
-
-	// Check session ID match
-	if m.stats.LastSessionID != m.sessionID {
-		b.WriteString(WarningStyle.Render("⚠ 統計情報は最新セッションのみ利用可能です（選択中のセッションは過去のセッションです）"))
-		b.WriteString("\n\n")
-	}
 
 	// Cost
 	b.WriteString(StatsLabelStyle.Render("コスト"))

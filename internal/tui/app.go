@@ -76,7 +76,7 @@ func NewAppModelWithSession(session claude.SessionInfo) AppModel {
 		agentView: NewAgentViewModel(),
 		logView:   NewLogViewModel(),
 		fileView:  NewFileViewModel(),
-		statsView: NewStatsViewModel(session.SessionID),
+		statsView: NewStatsViewModel(),
 	}
 }
 
@@ -108,7 +108,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SessionSelectedMsg:
 		m.state = StateViewer
 		m.session = msg.Session
-		m.statsView = NewStatsViewModel(msg.Session.SessionID)
+		m.statsView = NewStatsViewModel()
 		m.recomputeContentSize()
 		// Check if session is active
 		lockPath := filepath.Join(claude.TasksDir(msg.Session.SessionID), ".lock")
@@ -283,7 +283,7 @@ func (m *AppModel) View() string {
 	// Header
 	header := TitleStyle.Render("subagent-viewer")
 	if m.sessionActive {
-		header += "  " + ActiveSessionStyle.Render("● セッションアクティブ")
+		header += "  " + ActiveSessionStyle.Render("● ClaudeCode 稼働中")
 	}
 	header += "  " + HelpStyle.Render(m.session.Project)
 	b.WriteString(header)
