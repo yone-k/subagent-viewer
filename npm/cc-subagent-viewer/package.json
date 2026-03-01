@@ -1,0 +1,32 @@
+{
+  "name": "cc-subagent-viewer",
+  "version": "0.0.0",
+  "description": "Claude Code subagent monitoring TUI tool",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yone/cc-subagent-viewer.git"
+  },
+  "bin": {
+    "cc-subagent-viewer": "./bin/cc-subagent-viewer"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "subagent",
+    "tui",
+    "monitoring"
+  ],
+  "optionalDependencies": {
+    "cc-subagent-viewer-darwin-arm64": "0.0.0",
+    "cc-subagent-viewer-darwin-x64": "0.0.0",
+    "cc-subagent-viewer-linux-x64": "0.0.0",
+    "cc-subagent-viewer-linux-arm64": "0.0.0"
+  }
+}

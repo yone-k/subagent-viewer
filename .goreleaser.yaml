@@ -1,0 +1,39 @@
+version: 2
+
+project_name: cc-subagent-viewer
+
+builds:
+  - main: .
+    binary: cc-subagent-viewer
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    goamd64:
+      - v1
+
+archives:
+  - formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+release:
+  github:
+    owner: yone
+    name: cc-subagent-viewer
+  draft: false
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+checksum:
+  name_template: checksums.txt

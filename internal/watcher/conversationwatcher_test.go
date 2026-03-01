@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yone/subagent-viewer/internal/claude"
+	"github.com/yone/cc-subagent-viewer/internal/claude"
 )
 
 func writeAgentFile(t *testing.T, dir, filename, content string) {

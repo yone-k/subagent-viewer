@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/yone/subagent-viewer/internal/claude"
-	"github.com/yone/subagent-viewer/internal/watcher"
+	"github.com/yone/cc-subagent-viewer/internal/claude"
+	"github.com/yone/cc-subagent-viewer/internal/watcher"
 )
 
 const maxProgressBarWidth = 40

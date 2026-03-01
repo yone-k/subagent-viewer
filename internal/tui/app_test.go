@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/yone/subagent-viewer/internal/claude"
-	"github.com/yone/subagent-viewer/internal/watcher"
+	"github.com/yone/cc-subagent-viewer/internal/claude"
+	"github.com/yone/cc-subagent-viewer/internal/watcher"
 )
 
 func TestAppModel_InitialState(t *testing.T) {

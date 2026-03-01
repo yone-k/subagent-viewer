@@ -8,7 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/yone/subagent-viewer/internal/claude"
+	"github.com/yone/cc-subagent-viewer/internal/claude"
 )
 
 // renderedBlock is a pre-rendered block for display in the conversation view.

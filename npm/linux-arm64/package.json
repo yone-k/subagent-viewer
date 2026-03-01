@@ -1,0 +1,13 @@
+{
+  "name": "cc-subagent-viewer-linux-arm64",
+  "version": "0.0.0",
+  "description": "subagent-viewer binary for Linux ARM64",
+  "os": ["linux"],
+  "cpu": ["arm64"],
+  "preferUnplugged": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yone/cc-subagent-viewer.git"
+  }
+}

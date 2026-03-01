@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/yone/subagent-viewer/internal/claude"
+	"github.com/yone/cc-subagent-viewer/internal/claude"
 )
 
 // helper: create a ConversationViewModel with reasonable size and test entries.

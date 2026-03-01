@@ -1,7 +1,7 @@
 package watcher
 
 import (
-	"github.com/yone/subagent-viewer/internal/claude"
+	"github.com/yone/cc-subagent-viewer/internal/claude"
 )
 
 // TasksUpdatedMsg is sent when all tasks are loaded/reloaded.

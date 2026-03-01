@@ -1,2 +1,9 @@
 .idea/
-subagent-viewer
+/cc-subagent-viewer
+
+# GoReleaser build output
+dist/
+
+# npm platform binary packages (populated by CI)
+npm/*/bin/*
+!npm/cc-subagent-viewer/bin/cc-subagent-viewer

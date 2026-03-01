@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/yone/subagent-viewer/internal/claude"
-	"github.com/yone/subagent-viewer/internal/tui"
+	"github.com/yone/cc-subagent-viewer/internal/claude"
+	"github.com/yone/cc-subagent-viewer/internal/tui"
 )
 
 type runMode int

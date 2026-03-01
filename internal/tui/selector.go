@@ -9,7 +9,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/yone/subagent-viewer/internal/claude"
+	"github.com/yone/cc-subagent-viewer/internal/claude"
 )
 
 // SelectorFilterMode controls which sessions are displayed in the selector.
