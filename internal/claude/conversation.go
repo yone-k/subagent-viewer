@@ -56,9 +56,12 @@ type SubagentInfo struct {
 }
 
 // rawLine represents the top-level JSON structure of a conversation JSONL line.
+// For queue-operation lines (e.g. background agent task-notifications),
+// Content holds the top-level "content" field instead of Message.
 type rawLine struct {
 	Type    string          `json:"type"`
 	Message json.RawMessage `json:"message"`
+	Content json.RawMessage `json:"content"`
 	AgentID string          `json:"agentId"`
 	Slug    string          `json:"slug"`
 }
@@ -384,6 +387,18 @@ func ExtractAgentDescriptionsIncremental(parentPath string, offset int64, cache 
 
 		// Successfully parsed line — count its bytes
 		parsedBytes += int64(len(lineBytes)) + 1
+
+		// Handle queue-operation lines (background agent task-notifications).
+		// These have a top-level "content" string field instead of "message".
+		if rl.Type == "queue-operation" && len(rl.Content) > 0 {
+			var contentStr string
+			if err := json.Unmarshal(rl.Content, &contentStr); err == nil {
+				for _, completedID := range extractCompletedToolUseIDs(contentStr) {
+					cache.completedIDs[completedID] = true
+				}
+			}
+			continue
+		}
 
 		var msg rawMessage
 		if err := json.Unmarshal(rl.Message, &msg); err != nil {

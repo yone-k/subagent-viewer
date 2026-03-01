@@ -265,6 +265,37 @@ func TestExtractAgentDescriptions_BackgroundAgentStillRunning(t *testing.T) {
 	}
 }
 
+func TestExtractAgentDescriptions_QueueOperationCompletion(t *testing.T) {
+	// Background agent whose completion is signaled via a queue-operation line
+	// (the actual Claude Code format) rather than a type=user message.
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "conversation.jsonl")
+
+	lines := []string{
+		// Agent launched in background
+		`{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_bg3","name":"Agent","input":{"description":"BG queue task","prompt":"Do queue work","subagent_type":"general-task-executor","run_in_background":true}}]}}`,
+		// Immediate tool_result (launch confirmation)
+		`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_bg3","content":"Async agent launched successfully.\nagentId: xyz789"}]}}`,
+		// Completion via queue-operation (real Claude Code format)
+		`{"type":"queue-operation","operation":"enqueue","content":"<task-notification>\n<task-id>xyz789</task-id>\n<tool-use-id>toolu_bg3</tool-use-id>\n<status>completed</status>\n<summary>Agent completed</summary>\n</task-notification>","timestamp":"2025-01-01T00:00:00Z","sessionId":"test-session"}`,
+	}
+	content := strings.Join(lines, "\n") + "\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	descriptions, err := ExtractAgentDescriptions(path)
+	if err != nil {
+		t.Fatalf("ExtractAgentDescriptions() error = %v", err)
+	}
+	if len(descriptions) != 1 {
+		t.Fatalf("got %d descriptions, want 1", len(descriptions))
+	}
+	if descriptions[0].Status != SubagentClosed {
+		t.Errorf("Status = %q, want %q (queue-operation completion should mark agent as closed)", descriptions[0].Status, SubagentClosed)
+	}
+}
+
 func TestExtractAgentDescriptions_FileNotFound(t *testing.T) {
 	_, err := ExtractAgentDescriptions("/nonexistent/path/conversation.jsonl")
 	if err == nil {
