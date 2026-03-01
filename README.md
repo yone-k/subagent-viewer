@@ -23,13 +23,13 @@ npx cc-subagent-viewer
 Go 1.25 以上が必要です。
 
 ```bash
-go install github.com/yone/cc-subagent-viewer@latest
+go install github.com/yone-k/cc-subagent-viewer@latest
 ```
 
 または、リポジトリをクローンしてビルド:
 
 ```bash
-git clone https://github.com/yone/cc-subagent-viewer.git
+git clone https://github.com/yone-k/cc-subagent-viewer.git
 cd cc-subagent-viewer
 go build -o cc-subagent-viewer .
 ```

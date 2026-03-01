@@ -1,4 +1,4 @@
-module github.com/yone/cc-subagent-viewer
+module github.com/yone-k/cc-subagent-viewer
 
 go 1.25.0
 

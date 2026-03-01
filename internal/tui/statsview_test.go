@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yone/cc-subagent-viewer/internal/claude"
+	"github.com/yone-k/cc-subagent-viewer/internal/claude"
 )
 
 // StatsUpdatedMsg is sent when stats are available.

@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/yone/cc-subagent-viewer/internal/claude"
-	"github.com/yone/cc-subagent-viewer/internal/watcher"
+	"github.com/yone-k/cc-subagent-viewer/internal/claude"
+	"github.com/yone-k/cc-subagent-viewer/internal/watcher"
 )
 
 func TestTaskView_UpdateWithTasks(t *testing.T) {

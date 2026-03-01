@@ -23,7 +23,7 @@ archives:
 
 release:
   github:
-    owner: yone
+    owner: yone-k
     name: cc-subagent-viewer
   draft: false
 

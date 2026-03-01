@@ -6,7 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/fsnotify/fsnotify"
-	"github.com/yone/cc-subagent-viewer/internal/claude"
+	"github.com/yone-k/cc-subagent-viewer/internal/claude"
 )
 
 // TaskWatcher watches a tasks directory for changes.
