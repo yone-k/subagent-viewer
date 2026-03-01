@@ -1,0 +1,6 @@
+{"type":"user","message":{"content":"Start working on the project"}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"I'll explore the repo."},{"type":"tool_use","id":"tool1","name":"Agent","input":{"description":"Explore current repo structure","prompt":"Analyze the project structure and list all directories and key files. Focus on understanding the architecture.","subagent_type":"Explore"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"tool1","content":"Found 3 directories..."}]}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Now let me implement the feature."},{"type":"tool_use","id":"tool2","name":"Agent","input":{"description":"Implement user auth","prompt":"Add user authentication using JWT tokens. Create the auth middleware and login endpoint.","subagent_type":"general-task-executor"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"tool2","content":"Implementation complete"}]}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Let me also run the tests."},{"type":"tool_use","id":"tool3","name":"Read","input":{"file_path":"main.go"}}]}}

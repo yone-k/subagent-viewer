@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -32,11 +33,13 @@ type ConversationEntry struct {
 
 // SubagentInfo holds metadata about a discovered subagent.
 type SubagentInfo struct {
-	AgentID    string
-	Slug       string
-	Prompt     string // first user message, truncated
-	EntryCount int
-	FilePath   string
+	AgentID      string
+	Slug         string
+	Prompt       string // first user message, truncated
+	Description  string // from parent conversation Agent tool_use
+	SubagentType string // from parent conversation Agent tool_use (e.g. "Explore", "general-task-executor")
+	EntryCount   int
+	FilePath     string
 }
 
 // rawLine represents the top-level JSON structure of a conversation JSONL line.
@@ -70,12 +73,28 @@ func ParseConversationFile(path string) ([]ConversationEntry, *SubagentInfo, err
 	}
 	defer f.Close()
 
+	entries, info, err := ParseConversationEntries(f)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Set FilePath on info (only available when reading from a file)
+	if info != nil {
+		info.FilePath = path
+	}
+
+	return entries, info, nil
+}
+
+// ParseConversationEntries parses conversation entries from a reader.
+// This is the core parsing logic shared by ParseConversationFile and incremental readers.
+func ParseConversationEntries(r io.Reader) ([]ConversationEntry, *SubagentInfo, error) {
 	var entries []ConversationEntry
 	var info *SubagentInfo
 	firstUserPrompt := ""
 	firstLineParsed := false
 
-	scanner := bufio.NewScanner(f)
+	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -96,9 +115,8 @@ func ParseConversationFile(path string) ([]ConversationEntry, *SubagentInfo, err
 		// Extract agentId and slug from first valid line
 		if !firstLineParsed {
 			info = &SubagentInfo{
-				AgentID:  rl.AgentID,
-				Slug:     rl.Slug,
-				FilePath: path,
+				AgentID: rl.AgentID,
+				Slug:    rl.Slug,
 			}
 			firstLineParsed = true
 		}
@@ -129,7 +147,7 @@ func ParseConversationFile(path string) ([]ConversationEntry, *SubagentInfo, err
 		entries = append(entries, entry)
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, nil, fmt.Errorf("reading conversation file: %w", err)
+		return nil, nil, err
 	}
 
 	// Finalize SubagentInfo
@@ -205,6 +223,116 @@ func truncateString(s string, maxLen int) string {
 		return s
 	}
 	return string(runes[:maxLen])
+}
+
+// agentToolInput represents the parsed input of an Agent tool_use block.
+type agentToolInput struct {
+	Description  string `json:"description"`
+	Prompt       string `json:"prompt"`
+	SubagentType string `json:"subagent_type"`
+}
+
+// AgentDescription holds description and subagent type extracted from parent conversation.
+type AgentDescription struct {
+	Description  string
+	SubagentType string
+}
+
+// ExtractAgentDescriptions parses a parent conversation JSONL file and extracts
+// Agent tool_use descriptions. Returns a map from the full prompt string to AgentDescription.
+func ExtractAgentDescriptions(parentPath string) (map[string]AgentDescription, error) {
+	f, err := os.Open(parentPath)
+	if err != nil {
+		return nil, fmt.Errorf("opening parent conversation: %w", err)
+	}
+	defer f.Close()
+
+	descriptions := make(map[string]AgentDescription)
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+
+		var rl rawLine
+		if err := json.Unmarshal([]byte(line), &rl); err != nil {
+			continue
+		}
+
+		if rl.Type != "assistant" {
+			continue
+		}
+
+		var msg rawMessage
+		if err := json.Unmarshal(rl.Message, &msg); err != nil {
+			continue
+		}
+
+		// Parse content blocks to find Agent tool_use
+		var rawBlocks []rawContentBlock
+		if err := json.Unmarshal(msg.Content, &rawBlocks); err != nil {
+			continue
+		}
+
+		for _, rb := range rawBlocks {
+			if rb.Type != "tool_use" || rb.Name != "Agent" {
+				continue
+			}
+			if rb.Input == nil {
+				continue
+			}
+			var input agentToolInput
+			if err := json.Unmarshal(rb.Input, &input); err != nil {
+				continue
+			}
+			if input.Prompt == "" || input.Description == "" {
+				continue
+			}
+			key := input.Prompt
+			descriptions[key] = AgentDescription{
+				Description:  input.Description,
+				SubagentType: input.SubagentType,
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("reading parent conversation: %w", err)
+	}
+
+	return descriptions, nil
+}
+
+// EnrichSubagentsWithDescriptions matches subagents with descriptions extracted
+// from the parent conversation. Matching is done by comparing the agent's Prompt
+// (truncated to 60 chars) as a prefix of the full prompt keys. When multiple keys
+// share the same prefix, the shortest (most specific) key is chosen; ties in length
+// are broken by lexicographic order (smallest key wins) for determinism.
+func EnrichSubagentsWithDescriptions(agents []SubagentInfo, descriptions map[string]AgentDescription) {
+	for i := range agents {
+		prompt := agents[i].Prompt
+		if prompt == "" {
+			continue
+		}
+		promptRunes := []rune(prompt)
+		bestKey := ""
+		for key := range descriptions {
+			keyRunes := []rune(key)
+			if len(keyRunes) >= len(promptRunes) && string(keyRunes[:len(promptRunes)]) == prompt {
+				keyLen := len([]rune(key))
+				bestLen := len([]rune(bestKey))
+				if bestKey == "" || keyLen < bestLen || (keyLen == bestLen && key < bestKey) {
+					bestKey = key
+				}
+			}
+		}
+		if bestKey != "" {
+			agents[i].Description = descriptions[bestKey].Description
+			agents[i].SubagentType = descriptions[bestKey].SubagentType
+		}
+	}
 }
 
 // DiscoverSubagents scans a directory for agent-*.jsonl files and returns info about each.

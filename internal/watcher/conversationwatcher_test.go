@@ -30,7 +30,7 @@ func TestConversationWatcher_InitialLoad(t *testing.T) {
 	program := newTestProgram(collector)
 	defer program.Quit()
 
-	cw := NewConversationWatcher(subDir, "", program, nil)
+	cw := NewConversationWatcher(subDir, "", program, "", nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -75,7 +75,7 @@ func TestConversationWatcher_DetectsNewEntries(t *testing.T) {
 	program := newTestProgram(collector)
 	defer program.Quit()
 
-	cw := NewConversationWatcher(subDir, "", program, nil)
+	cw := NewConversationWatcher(subDir, "", program, "", nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -120,7 +120,7 @@ func TestConversationWatcher_DirNotExist(t *testing.T) {
 	program := newTestProgram(collector)
 	defer program.Quit()
 
-	cw := NewConversationWatcher("/nonexistent/path/subagents", "", program, nil)
+	cw := NewConversationWatcher("/nonexistent/path/subagents", "", program, "", nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -157,7 +157,7 @@ func TestConversationWatcher_DirAppearsLater(t *testing.T) {
 		return "", os.ErrNotExist
 	}
 
-	cw := NewConversationWatcher("", "test-session", program, findDir)
+	cw := NewConversationWatcher("", "test-session", program, "", findDir)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

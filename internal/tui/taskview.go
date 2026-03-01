@@ -6,22 +6,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/yone/subagent-viewer/internal/claude"
 	"github.com/yone/subagent-viewer/internal/watcher"
 )
 
 const maxProgressBarWidth = 40
-
-// TaskViewMode represents the current view mode within the Tasks tab.
-type TaskViewMode int
-
-const (
-	TaskViewModeTasks        TaskViewMode = iota // Task list (default)
-	TaskViewModeAgents                           // Subagent list
-	TaskViewModeConversation                     // Conversation view
-)
 
 // TaskViewModel manages the Tasks tab view.
 type TaskViewModel struct {
@@ -30,38 +20,17 @@ type TaskViewModel struct {
 	showDetail bool
 	width      int
 	height     int
-
-	// View mode
-	mode TaskViewMode
-
-	// Agent list
-	agents        []claude.SubagentInfo
-	agentSelected int
-
-	// Conversation view
-	conversations    map[string][]claude.ConversationEntry
-	conversationInfo map[string]*claude.SubagentInfo
-	conversationScroll int
-	currentAgentID   string
 }
 
 // NewTaskViewModel creates a new TaskViewModel.
 func NewTaskViewModel() TaskViewModel {
-	return TaskViewModel{
-		conversations:    make(map[string][]claude.ConversationEntry),
-		conversationInfo: make(map[string]*claude.SubagentInfo),
-	}
+	return TaskViewModel{}
 }
 
 // SetSize uses a pointer receiver because app.go calls it through a pointer to AppModel's field.
 func (m *TaskViewModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
-}
-
-// Mode returns the current view mode.
-func (m TaskViewModel) Mode() TaskViewMode {
-	return m.mode
 }
 
 // Init initializes the model.
@@ -94,16 +63,6 @@ func (m TaskViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return ni < nj
 			})
 		}
-	case watcher.SubagentsDiscoveredMsg:
-		m.agents = msg.Agents
-		if m.agentSelected >= len(m.agents) {
-			m.agentSelected = 0
-		}
-	case watcher.ConversationUpdatedMsg:
-		m.conversations[msg.AgentID] = msg.Entries
-		if msg.Info != nil {
-			m.conversationInfo[msg.AgentID] = msg.Info
-		}
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -111,81 +70,24 @@ func (m TaskViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m TaskViewModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch m.mode {
-	case TaskViewModeTasks:
-		switch {
-		case key.Matches(msg, TaskKeys.ShowAgents):
-			m.mode = TaskViewModeAgents
-			return m, nil
+	switch msg.String() {
+	case "up", "k":
+		if m.selected > 0 {
+			m.selected--
 		}
-		// Default task list key handling
-		switch msg.String() {
-		case "up", "k":
-			if m.selected > 0 {
-				m.selected--
-			}
-		case "down", "j":
-			if m.selected < len(m.tasks)-1 {
-				m.selected++
-			}
-		case "enter":
-			m.showDetail = !m.showDetail
+	case "down", "j":
+		if m.selected < len(m.tasks)-1 {
+			m.selected++
 		}
-
-	case TaskViewModeAgents:
-		switch {
-		case key.Matches(msg, TaskKeys.Escape):
-			m.mode = TaskViewModeTasks
-			return m, nil
-		}
-		switch msg.String() {
-		case "up", "k":
-			if m.agentSelected > 0 {
-				m.agentSelected--
-			}
-		case "down", "j":
-			if m.agentSelected < len(m.agents)-1 {
-				m.agentSelected++
-			}
-		case "enter":
-			if len(m.agents) > 0 && m.agentSelected < len(m.agents) {
-				m.currentAgentID = m.agents[m.agentSelected].AgentID
-				m.conversationScroll = 0
-				m.mode = TaskViewModeConversation
-			}
-		}
-
-	case TaskViewModeConversation:
-		switch {
-		case key.Matches(msg, TaskKeys.Escape):
-			m.mode = TaskViewModeAgents
-			return m, nil
-		}
-		entries := m.conversations[m.currentAgentID]
-		switch msg.String() {
-		case "up", "k":
-			if m.conversationScroll > 0 {
-				m.conversationScroll--
-			}
-		case "down", "j":
-			if m.conversationScroll < len(entries)-1 {
-				m.conversationScroll++
-			}
-		}
+	case "enter":
+		m.showDetail = !m.showDetail
 	}
 	return m, nil
 }
 
 // View renders the task list.
 func (m TaskViewModel) View() string {
-	switch m.mode {
-	case TaskViewModeAgents:
-		return m.viewAgents()
-	case TaskViewModeConversation:
-		return m.viewConversation()
-	default:
-		return m.viewTasks()
-	}
+	return m.viewTasks()
 }
 
 func (m TaskViewModel) viewTasks() string {
@@ -234,137 +136,6 @@ func (m TaskViewModel) viewTasks() string {
 		if i == m.selected && m.showDetail && task.Description != "" {
 			b.WriteString(BorderStyle.Render(task.Description))
 			b.WriteString("\n")
-		}
-	}
-
-	return b.String()
-}
-
-func (m TaskViewModel) viewAgents() string {
-	if len(m.agents) == 0 {
-		return EmptyStateStyle.Render("サブエージェントなし")
-	}
-
-	var b strings.Builder
-	b.WriteString(TitleStyle.Render("サブエージェント一覧"))
-	b.WriteString("\n\n")
-
-	for i, agent := range m.agents {
-		prefix := "  "
-		if i == m.agentSelected {
-			prefix = "> "
-		}
-
-		slug := agent.Slug
-		if slug == "" {
-			slug = agent.AgentID
-		}
-
-		prompt := agent.Prompt
-		if len([]rune(prompt)) > 60 {
-			prompt = string([]rune(prompt)[:60]) + "..."
-		}
-
-		line := fmt.Sprintf("%s%s", prefix, ConversationAssistantStyle.Render(slug))
-		line += DimStyle.Render(fmt.Sprintf("  %s", prompt))
-		line += HelpStyle.Render(fmt.Sprintf("  (%d entries)", agent.EntryCount))
-
-		b.WriteString(line + "\n")
-	}
-
-	return b.String()
-}
-
-func (m TaskViewModel) viewConversation() string {
-	entries := m.conversations[m.currentAgentID]
-	if len(entries) == 0 {
-		return EmptyStateStyle.Render("会話データなし")
-	}
-
-	var b strings.Builder
-
-	// Header with agent info
-	info := m.conversationInfo[m.currentAgentID]
-	if info != nil {
-		slug := info.Slug
-		if slug == "" {
-			slug = info.AgentID
-		}
-		b.WriteString(TitleStyle.Render(fmt.Sprintf("会話: %s", slug)))
-	} else {
-		b.WriteString(TitleStyle.Render(fmt.Sprintf("会話: %s", m.currentAgentID)))
-	}
-	b.WriteString(HelpStyle.Render(fmt.Sprintf("  %d/%d", m.conversationScroll+1, len(entries))))
-	b.WriteString("\n\n")
-
-	// Calculate visible range
-	visibleLines := m.height - 6
-	if visibleLines < 1 {
-		visibleLines = 10
-	}
-
-	start := m.conversationScroll
-	if start >= len(entries) {
-		start = len(entries) - 1
-	}
-	if start < 0 {
-		start = 0
-	}
-
-	// Render entries from scroll position
-	linesRendered := 0
-	for i := start; i < len(entries) && linesRendered < visibleLines; i++ {
-		entry := entries[i]
-		rendered := m.renderEntry(entry)
-		lines := strings.Count(rendered, "\n") + 1
-		b.WriteString(rendered)
-		b.WriteString("\n")
-		linesRendered += lines
-	}
-
-	return b.String()
-}
-
-func (m TaskViewModel) renderEntry(entry claude.ConversationEntry) string {
-	var b strings.Builder
-
-	switch entry.Type {
-	case claude.EntryTypeUser:
-		b.WriteString(ConversationUserStyle.Render("[USER]"))
-		b.WriteString(" ")
-		for _, block := range entry.Content {
-			switch block.Type {
-			case "text":
-				b.WriteString(block.Text)
-			case "tool_result":
-				text := block.Text
-				if len([]rune(text)) > 100 {
-					text = string([]rune(text)[:100]) + "..."
-				}
-				b.WriteString(ConversationToolStyle.Render(fmt.Sprintf("[TOOL_RESULT] %s", text)))
-			}
-		}
-
-	case claude.EntryTypeAssistant:
-		b.WriteString(ConversationAssistantStyle.Render("[ASSISTANT]"))
-		b.WriteString(" ")
-		for _, block := range entry.Content {
-			switch block.Type {
-			case "text":
-				b.WriteString(block.Text)
-			case "tool_use":
-				input := block.ToolInput
-				if len([]rune(input)) > 60 {
-					input = string([]rune(input)[:60]) + "..."
-				}
-				b.WriteString(ConversationToolStyle.Render(fmt.Sprintf("[TOOL] %s %s", block.ToolName, input)))
-			case "thinking":
-				text := block.Text
-				if len([]rune(text)) > 100 {
-					text = string([]rune(text)[:100]) + "..."
-				}
-				b.WriteString(ConversationThinkingStyle.Render(fmt.Sprintf("[thinking] %s", text)))
-			}
 		}
 	}
 

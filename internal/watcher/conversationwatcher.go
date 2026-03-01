@@ -1,9 +1,7 @@
 package watcher
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"time"
@@ -19,6 +17,7 @@ type ConversationWatcher struct {
 	dir         string
 	program     *tea.Program
 	sessionID   string
+	projectPath string
 	findDirFunc func(string) (string, error)
 	offsets     map[string]int64
 	entries     map[string][]claude.ConversationEntry
@@ -27,11 +26,12 @@ type ConversationWatcher struct {
 
 // NewConversationWatcher creates a new ConversationWatcher.
 // dir may be empty; in that case, findDirFunc is called each poll to discover it.
-func NewConversationWatcher(dir string, sessionID string, program *tea.Program, findDirFunc func(string) (string, error)) *ConversationWatcher {
+func NewConversationWatcher(dir string, sessionID string, program *tea.Program, projectPath string, findDirFunc func(string) (string, error)) *ConversationWatcher {
 	return &ConversationWatcher{
 		dir:         dir,
 		program:     program,
 		sessionID:   sessionID,
+		projectPath: projectPath,
 		findDirFunc: findDirFunc,
 		offsets:     make(map[string]int64),
 		entries:     make(map[string][]claude.ConversationEntry),
@@ -86,6 +86,13 @@ func (cw *ConversationWatcher) scan() {
 	if err != nil {
 		cw.program.Send(SubagentsDiscoveredMsg{})
 		return
+	}
+
+	// Enrich agents with descriptions from parent conversation
+	if cw.projectPath != "" {
+		parentPath := claude.ParentConversationPath(cw.projectPath, cw.sessionID)
+		descriptions, _ := claude.ExtractAgentDescriptions(parentPath)
+		claude.EnrichSubagentsWithDescriptions(agents, descriptions)
 	}
 
 	cw.program.Send(SubagentsDiscoveredMsg{Agents: agents})
@@ -160,6 +167,12 @@ func (cw *ConversationWatcher) poll() {
 		// Re-discover agents to update the list
 		agents, err := claude.DiscoverSubagents(cw.dir)
 		if err == nil {
+			// Enrich agents with descriptions from parent conversation
+			if cw.projectPath != "" {
+				parentPath := claude.ParentConversationPath(cw.projectPath, cw.sessionID)
+				descriptions, _ := claude.ExtractAgentDescriptions(parentPath)
+				claude.EnrichSubagentsWithDescriptions(agents, descriptions)
+			}
 			cw.program.Send(SubagentsDiscoveredMsg{Agents: agents})
 		}
 	}
@@ -176,9 +189,14 @@ func (cw *ConversationWatcher) poll() {
 		}
 
 		// Read new lines from offset
-		newEntries, info := cw.readNewEntries(path, prevOffset)
+		newEntries, info, readErr := cw.readNewEntries(path, prevOffset)
+		if readErr != nil {
+			// Scanner error (e.g. token too long, I/O error):
+			// do NOT advance offset to avoid permanently skipping unread data.
+			continue
+		}
 		if len(newEntries) == 0 {
-			// Update offset even if no valid entries parsed
+			// No valid entries but no error — safe to advance offset
 			cw.offsets[path] = currentSize
 			continue
 		}
@@ -212,66 +230,20 @@ func (cw *ConversationWatcher) poll() {
 }
 
 // readNewEntries reads new JSONL lines from the given offset.
-func (cw *ConversationWatcher) readNewEntries(path string, offset int64) ([]claude.ConversationEntry, *claude.SubagentInfo) {
+// Returns an error if the scanner encountered a read error (e.g. token too long),
+// so the caller can avoid advancing the offset and losing unread data.
+func (cw *ConversationWatcher) readNewEntries(path string, offset int64) ([]claude.ConversationEntry, *claude.SubagentInfo, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, nil
+		return nil, nil, err
 	}
 	defer f.Close()
 
 	if _, err := f.Seek(offset, 0); err != nil {
-		return nil, nil
+		return nil, nil, err
 	}
 
-	var entries []claude.ConversationEntry
-	var info *claude.SubagentInfo
-
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" {
-			continue
-		}
-
-		var rl struct {
-			Type    string          `json:"type"`
-			Message json.RawMessage `json:"message"`
-			AgentID string          `json:"agentId"`
-			Slug    string          `json:"slug"`
-		}
-		if err := json.Unmarshal([]byte(line), &rl); err != nil {
-			continue
-		}
-
-		if rl.Type != "user" && rl.Type != "assistant" {
-			continue
-		}
-
-		var msg struct {
-			Content json.RawMessage `json:"content"`
-		}
-		if err := json.Unmarshal(rl.Message, &msg); err != nil {
-			continue
-		}
-
-		blocks := claude.ParseContentBlocks(msg.Content)
-
-		entry := claude.ConversationEntry{
-			Type:    claude.ConversationEntryType(rl.Type),
-			Content: blocks,
-		}
-		entries = append(entries, entry)
-
-		if info == nil {
-			info = &claude.SubagentInfo{
-				AgentID: rl.AgentID,
-				Slug:    rl.Slug,
-			}
-		}
-	}
-
-	return entries, info
+	return claude.ParseConversationEntries(f)
 }
 
 

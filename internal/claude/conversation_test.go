@@ -110,6 +110,106 @@ func TestParseConversationFile_NonExistentFile(t *testing.T) {
 	}
 }
 
+func TestExtractAgentDescriptions(t *testing.T) {
+	path := filepath.Join("testdata", "parent-conversation.jsonl")
+	descriptions, err := ExtractAgentDescriptions(path)
+	if err != nil {
+		t.Fatalf("ExtractAgentDescriptions() error = %v", err)
+	}
+
+	if len(descriptions) != 2 {
+		t.Fatalf("got %d descriptions, want 2", len(descriptions))
+	}
+
+	// First Agent tool_use: prompt is within 200 chars, used as-is for key
+	key1 := "Analyze the project structure and list all directories and key files. Focus on understanding the architecture."
+	if desc, ok := descriptions[key1]; !ok {
+		t.Errorf("key %q not found in descriptions", key1)
+	} else {
+		if desc.Description != "Explore current repo structure" {
+			t.Errorf("descriptions[key1].Description = %q, want %q", desc.Description, "Explore current repo structure")
+		}
+		if desc.SubagentType != "Explore" {
+			t.Errorf("descriptions[key1].SubagentType = %q, want %q", desc.SubagentType, "Explore")
+		}
+	}
+
+	// Second Agent tool_use
+	key2 := "Add user authentication using JWT tokens. Create the auth middleware and login endpoint."
+	if desc, ok := descriptions[key2]; !ok {
+		t.Errorf("key %q not found in descriptions", key2)
+	} else {
+		if desc.Description != "Implement user auth" {
+			t.Errorf("descriptions[key2].Description = %q, want %q", desc.Description, "Implement user auth")
+		}
+		if desc.SubagentType != "general-task-executor" {
+			t.Errorf("descriptions[key2].SubagentType = %q, want %q", desc.SubagentType, "general-task-executor")
+		}
+	}
+}
+
+func TestExtractAgentDescriptions_FileNotFound(t *testing.T) {
+	_, err := ExtractAgentDescriptions("/nonexistent/path/conversation.jsonl")
+	if err == nil {
+		t.Error("expected error for non-existent file")
+	}
+}
+
+func TestEnrichSubagentsWithDescriptions(t *testing.T) {
+	// Simulate descriptions extracted from parent conversation (key = full prompt)
+	descriptions := map[string]AgentDescription{
+		"Analyze the project structure and list all directories and key files. Focus on understanding the architecture.": {Description: "Explore current repo structure", SubagentType: "Explore"},
+		"Add user authentication using JWT tokens. Create the auth middleware and login endpoint.":                       {Description: "Implement user auth", SubagentType: "general-task-executor"},
+	}
+
+	agents := []SubagentInfo{
+		{
+			AgentID: "agent1",
+			// Prompt is the full prompt (within 60 chars)
+			Prompt: "Analyze the project structure and list all directories and k",
+		},
+		{
+			AgentID: "agent2",
+			// Prompt truncated to 60 chars by ParseConversationFile
+			Prompt: truncateString("Add user authentication using JWT tokens. Create the auth middleware and login endpoint.", 60),
+		},
+	}
+
+	EnrichSubagentsWithDescriptions(agents, descriptions)
+
+	if agents[0].Description != "Explore current repo structure" {
+		t.Errorf("agents[0].Description = %q, want %q", agents[0].Description, "Explore current repo structure")
+	}
+	if agents[0].SubagentType != "Explore" {
+		t.Errorf("agents[0].SubagentType = %q, want %q", agents[0].SubagentType, "Explore")
+	}
+	if agents[1].Description != "Implement user auth" {
+		t.Errorf("agents[1].Description = %q, want %q", agents[1].Description, "Implement user auth")
+	}
+	if agents[1].SubagentType != "general-task-executor" {
+		t.Errorf("agents[1].SubagentType = %q, want %q", agents[1].SubagentType, "general-task-executor")
+	}
+}
+
+func TestEnrichSubagentsWithDescriptions_NoMatch(t *testing.T) {
+	descriptions := map[string]AgentDescription{
+		"Some prompt that does not match": {Description: "Some description", SubagentType: "Explore"},
+	}
+
+	agents := []SubagentInfo{
+		{
+			AgentID: "agent1",
+			Prompt:  "Completely different prompt text",
+		},
+	}
+
+	EnrichSubagentsWithDescriptions(agents, descriptions)
+
+	if agents[0].Description != "" {
+		t.Errorf("agents[0].Description = %q, want empty string", agents[0].Description)
+	}
+}
+
 func TestDiscoverSubagents(t *testing.T) {
 	dir := filepath.Join("testdata", "subagents")
 	agents, err := DiscoverSubagents(dir)

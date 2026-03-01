@@ -45,21 +45,21 @@ func TestAppModel_TabSwitch(t *testing.T) {
 	m.width = 80
 	m.height = 24
 
-	// Switch to tab 2 (Logs)
+	// Switch to tab 2 (Agents)
 	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
 	mPtr := newModel.(*AppModel)
 	if mPtr.tabs.Active != 1 {
 		t.Errorf("Active tab = %d, want 1", mPtr.tabs.Active)
 	}
 
-	// Switch to tab 3 (Files)
+	// Switch to tab 3 (Logs)
 	newModel, _ = mPtr.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
 	mPtr = newModel.(*AppModel)
 	if mPtr.tabs.Active != 2 {
 		t.Errorf("Active tab = %d, want 2", mPtr.tabs.Active)
 	}
 
-	// Switch to tab 4 (Stats)
+	// Switch to tab 4 (Files)
 	newModel, _ = mPtr.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("4")})
 	mPtr = newModel.(*AppModel)
 	if mPtr.tabs.Active != 3 {
@@ -248,8 +248,8 @@ func TestAppModel_SubagentsDiscoveredMsg(t *testing.T) {
 	newModel, _ := m.Update(watcher.SubagentsDiscoveredMsg{Agents: agents})
 	mPtr := newModel.(*AppModel)
 
-	if len(mPtr.taskView.agents) != 1 {
-		t.Errorf("agents count = %d, want 1", len(mPtr.taskView.agents))
+	if len(mPtr.agentView.agents) != 1 {
+		t.Errorf("agents count = %d, want 1", len(mPtr.agentView.agents))
 	}
 }
 
@@ -269,7 +269,7 @@ func TestAppModel_ConversationUpdatedMsg(t *testing.T) {
 	})
 	mPtr := newModel.(*AppModel)
 
-	if len(mPtr.taskView.conversations["agent1"]) != 1 {
-		t.Errorf("conversation entries = %d, want 1", len(mPtr.taskView.conversations["agent1"]))
+	if len(mPtr.agentView.conversations["agent1"]) != 1 {
+		t.Errorf("conversation entries = %d, want 1", len(mPtr.agentView.conversations["agent1"]))
 	}
 }

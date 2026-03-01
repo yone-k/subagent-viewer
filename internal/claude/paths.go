@@ -2,7 +2,6 @@ package claude
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,18 +13,19 @@ var (
 	homeDirOnce sync.Once
 )
 
-func init() {
+func ensureHomeDir() {
 	homeDirOnce.Do(func() {
 		var err error
 		homeDir, err = os.UserHomeDir()
 		if err != nil {
-			log.Fatalf("failed to determine user home directory: %v", err)
+			homeDir = ""
 		}
 	})
 }
 
 // ClaudeDir returns the path to ~/.claude
 func ClaudeDir() string {
+	ensureHomeDir()
 	return filepath.Join(homeDir, ".claude")
 }
 
@@ -51,6 +51,7 @@ func FileHistoryDir(sessionID string) string {
 
 // GlobalConfigPath returns the path to ~/.claude.json
 func GlobalConfigPath() string {
+	ensureHomeDir()
 	return filepath.Join(homeDir, ".claude.json")
 }
 
@@ -71,6 +72,13 @@ func EncodeProjectPath(projectPath string) string {
 func SubagentsDir(projectPath, sessionID string) string {
 	encoded := EncodeProjectPath(projectPath)
 	return filepath.Join(ProjectsDir(), encoded, sessionID, "subagents")
+}
+
+// ParentConversationPath returns the path to the parent conversation JSONL file
+// for a given project and session.
+func ParentConversationPath(projectPath, sessionID string) string {
+	encoded := EncodeProjectPath(projectPath)
+	return filepath.Join(ProjectsDir(), encoded, sessionID+".jsonl")
 }
 
 // FindSubagentsDirBySessionID searches for a subagents directory by session ID

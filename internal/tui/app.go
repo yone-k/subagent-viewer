@@ -40,6 +40,7 @@ type AppModel struct {
 	selector  SelectorModel
 	tabs      TabsModel
 	taskView  TaskViewModel
+	agentView AgentViewModel
 	logView   LogViewModel
 	fileView  FileViewModel
 	statsView StatsViewModel
@@ -53,12 +54,13 @@ type AppModel struct {
 // statsView is zero-valued; initialized when session is selected.
 func NewAppModel(sessions []claude.SessionInfo) AppModel {
 	return AppModel{
-		state:    StateSelector,
-		selector: NewSelectorModel(sessions),
-		tabs:     NewTabsModel(),
-		taskView: NewTaskViewModel(),
-		logView:  NewLogViewModel(),
-		fileView: NewFileViewModel(),
+		state:     StateSelector,
+		selector:  NewSelectorModel(sessions),
+		tabs:      NewTabsModel(),
+		taskView:  NewTaskViewModel(),
+		agentView: NewAgentViewModel(),
+		logView:   NewLogViewModel(),
+		fileView:  NewFileViewModel(),
 	}
 }
 
@@ -70,6 +72,7 @@ func NewAppModelWithSession(session claude.SessionInfo) AppModel {
 		session:   session,
 		tabs:      NewTabsModel(),
 		taskView:  NewTaskViewModel(),
+		agentView: NewAgentViewModel(),
 		logView:   NewLogViewModel(),
 		fileView:  NewFileViewModel(),
 		statsView: NewStatsViewModel(session.SessionID),
@@ -98,6 +101,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.selector.SetSize(msg.Width, msg.Height)
 		contentHeight := msg.Height - headerAndTabsHeight
 		m.taskView.SetSize(msg.Width, contentHeight)
+		m.agentView.SetSize(msg.Width, contentHeight)
 		m.logView.SetSize(msg.Width, contentHeight)
 		m.fileView.SetSize(msg.Width, contentHeight)
 		m.statsView.SetSize(msg.Width, contentHeight)
@@ -152,13 +156,14 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case watcher.SubagentsDiscoveredMsg:
-		newModel, cmd := m.taskView.Update(msg)
-		m.taskView = newModel.(TaskViewModel)
+		newModel, cmd := m.agentView.Update(msg)
+		m.agentView = newModel.(AgentViewModel)
+		m.tabs.SetBadge(1, len(msg.Agents))
 		return m, cmd
 
 	case watcher.ConversationUpdatedMsg:
-		newModel, cmd := m.taskView.Update(msg)
-		m.taskView = newModel.(TaskViewModel)
+		newModel, cmd := m.agentView.Update(msg)
+		m.agentView = newModel.(AgentViewModel)
 		return m, cmd
 
 	case StatsUpdatedMsg:
@@ -194,7 +199,7 @@ func (m *AppModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// In viewer state, handle global keys first
 	// Check if the log view is in search mode - if so, delegate to log view
-	if m.tabs.Active == 1 && m.logView.searching {
+	if m.tabs.Active == 2 && m.logView.searching {
 		newModel, cmd := m.logView.Update(msg)
 		m.logView = newModel.(LogViewModel)
 		return m, cmd
@@ -219,20 +224,19 @@ func (m *AppModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, GlobalKeys.Tab4):
 		m.tabs.SetActive(3)
 		return m, nil
+	case key.Matches(msg, GlobalKeys.Tab5):
+		m.tabs.SetActive(4)
+		return m, nil
 	case key.Matches(msg, GlobalKeys.NextTab):
-		// In task sub-modes, arrow keys should not switch tabs
-		if m.tabs.Active == 0 && m.taskView.Mode() != TaskViewModeTasks {
-			if msg.String() == "right" || msg.String() == "left" {
-				break // fall through to tab delegation below
-			}
+		// In agent conversation mode, block tab key (used for pane switching)
+		if m.tabs.Active == 1 && m.agentView.Mode() == AgentViewModeConversation {
+			break // fall through to tab delegation below
 		}
 		m.tabs.NextTab()
 		return m, nil
 	case key.Matches(msg, GlobalKeys.PrevTab):
-		if m.tabs.Active == 0 && m.taskView.Mode() != TaskViewModeTasks {
-			if msg.String() == "right" || msg.String() == "left" {
-				break
-			}
+		if m.tabs.Active == 1 && m.agentView.Mode() == AgentViewModeConversation {
+			break
 		}
 		m.tabs.PrevTab()
 		return m, nil
@@ -246,14 +250,18 @@ func (m *AppModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.taskView = newModel.(TaskViewModel)
 		cmd = c
 	case 1:
+		newModel, c := m.agentView.Update(msg)
+		m.agentView = newModel.(AgentViewModel)
+		cmd = c
+	case 2:
 		newModel, c := m.logView.Update(msg)
 		m.logView = newModel.(LogViewModel)
 		cmd = c
-	case 2:
+	case 3:
 		newModel, c := m.fileView.Update(msg)
 		m.fileView = newModel.(FileViewModel)
 		cmd = c
-	case 3:
+	case 4:
 		newModel, c := m.statsView.Update(msg)
 		m.statsView = newModel.(StatsViewModel)
 		cmd = c
@@ -288,10 +296,12 @@ func (m *AppModel) View() string {
 	case 0:
 		b.WriteString(m.taskView.View())
 	case 1:
-		b.WriteString(m.logView.View())
+		b.WriteString(m.agentView.View())
 	case 2:
-		b.WriteString(m.fileView.View())
+		b.WriteString(m.logView.View())
 	case 3:
+		b.WriteString(m.fileView.View())
+	case 4:
 		b.WriteString(m.statsView.View())
 	}
 
@@ -309,18 +319,16 @@ func (m *AppModel) View() string {
 func (m *AppModel) footerHelp() string {
 	base := fmt.Sprintf("Session: %s", m.session.SessionID)
 
-	if m.tabs.Active == 0 {
-		switch m.taskView.Mode() {
-		case TaskViewModeAgents:
-			return fmt.Sprintf("enter: 会話表示  esc: 戻る  q: 終了  %s", base)
-		case TaskViewModeConversation:
-			return fmt.Sprintf("j/k: スクロール  esc: 戻る  q: 終了  %s", base)
-		default:
-			return fmt.Sprintf("1-4/←→: タブ切替  a: エージェント  q: 終了  %s", base)
+	if m.tabs.Active == 1 {
+		switch m.agentView.Mode() {
+		case AgentViewModeList:
+			return fmt.Sprintf("enter: 会話表示  1-5: タブ切替  q: 終了  %s", base)
+		case AgentViewModeConversation:
+			return fmt.Sprintf("j/k: 移動  tab: パネル切替  esc: 戻る  q: 終了  %s", base)
 		}
 	}
 
-	return fmt.Sprintf("1-4/←→: タブ切替  q: 終了  %s", base)
+	return fmt.Sprintf("1-5/←→: タブ切替  q: 終了  %s", base)
 }
 
 func (m *AppModel) startWatchersCmd() tea.Cmd {
@@ -364,7 +372,7 @@ func (m *AppModel) StartWatchers(program *tea.Program) {
 	if m.session.Project != "" {
 		subagentsDir = claude.SubagentsDir(m.session.Project, sessionID)
 	}
-	cw := watcher.NewConversationWatcher(subagentsDir, sessionID, program, claude.FindSubagentsDirBySessionID)
+	cw := watcher.NewConversationWatcher(subagentsDir, sessionID, program, m.session.Project, claude.FindSubagentsDirBySessionID)
 	go cw.Start(ctx)
 }
 

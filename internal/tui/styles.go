@@ -128,6 +128,22 @@ var (
 		Bold(true)
 )
 
+// Split pane styles
+var (
+	PaneFocusedBorder = lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(colorPrimary)
+
+	PaneUnfocusedBorder = lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(colorMuted)
+
+	DetailToolNameStyle = lipgloss.NewStyle().
+		Foreground(colorCyan).
+		Bold(true)
+
+)
+
 // Conversation styles
 var (
 	ConversationUserStyle = lipgloss.NewStyle().

@@ -8,6 +8,7 @@ type GlobalKeyMap struct {
 	Tab2    key.Binding
 	Tab3    key.Binding
 	Tab4    key.Binding
+	Tab5    key.Binding
 	NextTab key.Binding
 	PrevTab key.Binding
 	Quit    key.Binding
@@ -20,15 +21,19 @@ var GlobalKeys = GlobalKeyMap{
 	),
 	Tab2: key.NewBinding(
 		key.WithKeys("2"),
-		key.WithHelp("2", "ログ"),
+		key.WithHelp("2", "エージェント"),
 	),
 	Tab3: key.NewBinding(
 		key.WithKeys("3"),
-		key.WithHelp("3", "ファイル"),
+		key.WithHelp("3", "ログ"),
 	),
 	Tab4: key.NewBinding(
 		key.WithKeys("4"),
-		key.WithHelp("4", "統計"),
+		key.WithHelp("4", "ファイル"),
+	),
+	Tab5: key.NewBinding(
+		key.WithKeys("5"),
+		key.WithHelp("5", "統計"),
 	),
 	NextTab: key.NewBinding(
 		key.WithKeys("tab", "right"),
@@ -119,17 +124,29 @@ var FileKeys = FileKeyMap{
 	),
 }
 
-// TaskKeyMap defines keybindings for the Tasks tab.
-type TaskKeyMap struct {
-	ShowAgents key.Binding
+// ConversationKeyMap defines keybindings for the conversation split panel.
+type ConversationKeyMap struct {
+	SwitchPane key.Binding
 	Escape     key.Binding
 }
 
-var TaskKeys = TaskKeyMap{
-	ShowAgents: key.NewBinding(
-		key.WithKeys("a"),
-		key.WithHelp("a", "エージェント"),
+var ConversationKeys = ConversationKeyMap{
+	SwitchPane: key.NewBinding(
+		key.WithKeys("tab"),
+		key.WithHelp("tab", "パネル切替"),
 	),
+	Escape: key.NewBinding(
+		key.WithKeys("esc"),
+		key.WithHelp("esc", "戻る"),
+	),
+}
+
+// AgentKeyMap defines keybindings for the Agents tab.
+type AgentKeyMap struct {
+	Escape key.Binding
+}
+
+var AgentKeys = AgentKeyMap{
 	Escape: key.NewBinding(
 		key.WithKeys("esc"),
 		key.WithHelp("esc", "戻る"),
