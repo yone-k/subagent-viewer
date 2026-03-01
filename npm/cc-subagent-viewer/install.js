@@ -1,33 +1,101 @@
 "use strict";
 
-const SUPPORTED_PLATFORMS = {
-  "darwin-arm64": "cc-subagent-viewer-darwin-arm64",
-  "darwin-x64": "cc-subagent-viewer-darwin-x64",
-  "linux-x64": "cc-subagent-viewer-linux-x64",
-  "linux-arm64": "cc-subagent-viewer-linux-arm64",
+const https = require("https");
+const http = require("http");
+const fs = require("fs");
+const path = require("path");
+const { execSync } = require("child_process");
+
+const ARCH_MAP = {
+  x64: "amd64",
+  arm64: "arm64",
 };
 
-const platformKey = `${process.platform}-${process.arch}`;
-const packageName = SUPPORTED_PLATFORMS[platformKey];
+const PLATFORM_MAP = {
+  darwin: "darwin",
+  linux: "linux",
+};
 
-if (!packageName) {
-  console.warn(
-    `警告: cc-subagent-viewer はこのプラットフォーム (${process.platform}-${process.arch}) をサポートしていません。\n` +
-    `サポート対象: ${Object.keys(SUPPORTED_PLATFORMS).join(", ")}`
+function getArchiveName(version) {
+  const platform = PLATFORM_MAP[process.platform];
+  const arch = ARCH_MAP[process.arch];
+
+  if (!platform || !arch) {
+    return null;
+  }
+
+  return `cc-subagent-viewer_${version}_${platform}_${arch}.tar.gz`;
+}
+
+function getDownloadUrl(version, archiveName) {
+  return `https://github.com/yone-k/cc-subagent-viewer/releases/download/v${version}/${archiveName}`;
+}
+
+function download(url) {
+  return new Promise((resolve, reject) => {
+    const get = url.startsWith("https") ? https.get : http.get;
+    get(url, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        download(res.headers.location).then(resolve, reject);
+        return;
+      }
+      if (res.statusCode !== 200) {
+        reject(new Error(`ダウンロード失敗: HTTP ${res.statusCode} - ${url}`));
+        return;
+      }
+      const chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () => resolve(Buffer.concat(chunks)));
+      res.on("error", reject);
+    }).on("error", reject);
+  });
+}
+
+async function main() {
+  const pkgJson = JSON.parse(
+    fs.readFileSync(path.join(__dirname, "package.json"), "utf8")
   );
-  // Don't fail the install - exit cleanly
+  const version = pkgJson.version;
+
+  const archiveName = getArchiveName(version);
+  if (!archiveName) {
+    console.warn(
+      `警告: cc-subagent-viewer はこのプラットフォーム (${process.platform}-${process.arch}) をサポートしていません。\n` +
+      `サポート対象: darwin-arm64, darwin-x64, linux-x64, linux-arm64`
+    );
+    process.exit(0);
+  }
+
+  const url = getDownloadUrl(version, archiveName);
+  console.log(`cc-subagent-viewer v${version} をダウンロード中...`);
+  console.log(`  URL: ${url}`);
+
+  const data = await download(url);
+
+  // tar.gz を一時ファイルに書き出し
+  const tmpFile = path.join(__dirname, ".download.tar.gz");
+  fs.writeFileSync(tmpFile, data);
+
+  // バイナリをパッケージルート直下に展開
+  const binaryDest = path.join(__dirname, "cc-subagent-viewer");
+  try {
+    execSync(`tar xzf "${tmpFile}" -C "${__dirname}" cc-subagent-viewer`, {
+      stdio: "pipe",
+    });
+    fs.chmodSync(binaryDest, 0o755);
+    console.log(`  バイナリを配置しました: ${binaryDest}`);
+  } finally {
+    // 一時ファイルを削除
+    try {
+      fs.unlinkSync(tmpFile);
+    } catch (_) {}
+  }
+}
+
+main().catch((err) => {
+  console.error(`警告: バイナリのダウンロードに失敗しました: ${err.message}`);
+  console.error(
+    "手動でバイナリをダウンロードするか、CC_SUBAGENT_VIEWER_BINARY_PATH 環境変数でパスを指定してください。"
+  );
   process.exit(0);
-}
-
-try {
-  require.resolve(`${packageName}/package.json`);
-} catch (e) {
-  console.warn(
-    `警告: プラットフォームパッケージ ${packageName} がインストールされていません。\n` +
-    `cc-subagent-viewer が正常に動作しない可能性があります。\n` +
-    `npm install を --no-optional なしで再実行してください。`
-  );
-}
-
-// Always exit cleanly to not block the install
-process.exit(0);
+});

@@ -5,14 +5,6 @@
 const { spawnSync } = require("child_process");
 const path = require("path");
 
-// Platform/arch to npm package name mapping
-const PLATFORM_MAP = {
-  "darwin-arm64": "cc-subagent-viewer-darwin-arm64",
-  "darwin-x64": "cc-subagent-viewer-darwin-x64",
-  "linux-x64": "cc-subagent-viewer-linux-x64",
-  "linux-arm64": "cc-subagent-viewer-linux-arm64",
-};
-
 function getBinaryPath() {
   // Allow override via environment variable
   const envPath = process.env.CC_SUBAGENT_VIEWER_BINARY_PATH;
@@ -20,28 +12,7 @@ function getBinaryPath() {
     return envPath;
   }
 
-  const platformKey = `${process.platform}-${process.arch}`;
-  const packageName = PLATFORM_MAP[platformKey];
-
-  if (!packageName) {
-    console.error(
-      `エラー: サポートされていないプラットフォームです: ${process.platform} ${process.arch}\n` +
-      `サポート対象: ${Object.keys(PLATFORM_MAP).join(", ")}`
-    );
-    process.exit(1);
-  }
-
-  try {
-    // Resolve the binary path from the platform-specific package
-    const packageDir = path.dirname(require.resolve(`${packageName}/package.json`));
-    return path.join(packageDir, "bin", "subagent-viewer");
-  } catch (e) {
-    console.error(
-      `エラー: プラットフォームパッケージ ${packageName} が見つかりません。\n` +
-      `npm install を再実行してください。`
-    );
-    process.exit(1);
-  }
+  return path.join(__dirname, "..", "cc-subagent-viewer");
 }
 
 const binaryPath = getBinaryPath();
@@ -51,6 +22,9 @@ const result = spawnSync(binaryPath, process.argv.slice(2), {
 
 if (result.error) {
   console.error(`エラー: バイナリの実行に失敗しました: ${result.error.message}`);
+  console.error(
+    "npm install を再実行するか、CC_SUBAGENT_VIEWER_BINARY_PATH 環境変数でパスを指定してください。"
+  );
   process.exit(1);
 }
 

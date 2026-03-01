@@ -22,11 +22,5 @@
     "subagent",
     "tui",
     "monitoring"
-  ],
-  "optionalDependencies": {
-    "cc-subagent-viewer-darwin-arm64": "0.0.0",
-    "cc-subagent-viewer-darwin-x64": "0.0.0",
-    "cc-subagent-viewer-linux-x64": "0.0.0",
-    "cc-subagent-viewer-linux-arm64": "0.0.0"
-  }
+  ]
 }

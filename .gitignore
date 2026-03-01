@@ -4,6 +4,5 @@
 # GoReleaser build output
 dist/
 
-# npm platform binary packages (populated by CI)
-npm/*/bin/*
-!npm/cc-subagent-viewer/bin/cc-subagent-viewer
+# npm postinstall downloaded binary
+npm/cc-subagent-viewer/cc-subagent-viewer
