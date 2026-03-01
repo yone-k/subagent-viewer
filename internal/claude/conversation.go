@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
+	"time"
 )
 
 // ConversationEntryType represents the type of a conversation entry.
@@ -40,6 +42,7 @@ type SubagentInfo struct {
 	SubagentType string // from parent conversation Agent tool_use (e.g. "Explore", "general-task-executor")
 	EntryCount   int
 	FilePath     string
+	CreatedAt    time.Time // file modification time, used for sorting
 }
 
 // rawLine represents the top-level JSON structure of a conversation JSONL line.
@@ -336,6 +339,7 @@ func EnrichSubagentsWithDescriptions(agents []SubagentInfo, descriptions map[str
 }
 
 // DiscoverSubagents scans a directory for agent-*.jsonl files and returns info about each.
+// Results are sorted by file modification time descending (newest first).
 func DiscoverSubagents(subagentsDir string) ([]SubagentInfo, error) {
 	matches, err := filepath.Glob(filepath.Join(subagentsDir, "agent-*.jsonl"))
 	if err != nil {
@@ -349,8 +353,18 @@ func DiscoverSubagents(subagentsDir string) ([]SubagentInfo, error) {
 			continue // skip broken files
 		}
 		if info != nil {
+			fi, err := os.Stat(path)
+			if err == nil {
+				info.CreatedAt = fi.ModTime()
+			}
 			agents = append(agents, *info)
 		}
 	}
+
+	// Sort by CreatedAt descending (newest first)
+	sort.Slice(agents, func(i, j int) bool {
+		return agents[i].CreatedAt.After(agents[j].CreatedAt)
+	})
+
 	return agents, nil
 }

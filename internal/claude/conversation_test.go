@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestParseConversationFile_ValidEntries(t *testing.T) {
@@ -231,5 +232,61 @@ func TestDiscoverSubagents(t *testing.T) {
 	}
 	if !agentIDs["def456"] {
 		t.Error("expected agent def456 to be found")
+	}
+}
+
+func TestDiscoverSubagents_SortedByNewestFirst(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create agent files with known modification times
+	// agent-old: oldest
+	oldContent := `{"type":"user","message":{"content":"old task"},"isSidechain":true,"agentId":"old-agent","slug":"old","sessionId":"s1"}
+{"type":"assistant","message":{"content":"done"},"isSidechain":true,"agentId":"old-agent","slug":"old","sessionId":"s1"}
+`
+	// agent-mid: middle
+	midContent := `{"type":"user","message":{"content":"mid task"},"isSidechain":true,"agentId":"mid-agent","slug":"mid","sessionId":"s1"}
+{"type":"assistant","message":{"content":"done"},"isSidechain":true,"agentId":"mid-agent","slug":"mid","sessionId":"s1"}
+`
+	// agent-new: newest
+	newContent := `{"type":"user","message":{"content":"new task"},"isSidechain":true,"agentId":"new-agent","slug":"new","sessionId":"s1"}
+{"type":"assistant","message":{"content":"done"},"isSidechain":true,"agentId":"new-agent","slug":"new","sessionId":"s1"}
+`
+
+	baseTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	files := []struct {
+		name    string
+		content string
+		modTime time.Time
+	}{
+		{"agent-old.jsonl", oldContent, baseTime},
+		{"agent-mid.jsonl", midContent, baseTime.Add(1 * time.Hour)},
+		{"agent-new.jsonl", newContent, baseTime.Add(2 * time.Hour)},
+	}
+
+	for _, f := range files {
+		path := filepath.Join(dir, f.name)
+		if err := os.WriteFile(path, []byte(f.content), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, f.modTime, f.modTime); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	agents, err := DiscoverSubagents(dir)
+	if err != nil {
+		t.Fatalf("DiscoverSubagents() error = %v", err)
+	}
+
+	if len(agents) != 3 {
+		t.Fatalf("got %d agents, want 3", len(agents))
+	}
+
+	// Expect newest first
+	wantOrder := []string{"new-agent", "mid-agent", "old-agent"}
+	for i, want := range wantOrder {
+		if agents[i].AgentID != want {
+			t.Errorf("agents[%d].AgentID = %q, want %q", i, agents[i].AgentID, want)
+		}
 	}
 }
