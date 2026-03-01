@@ -208,6 +208,63 @@ func TestExtractAgentDescriptions_AsyncLaunchFallback(t *testing.T) {
 	}
 }
 
+func TestExtractAgentDescriptions_BackgroundAgentCompleted(t *testing.T) {
+	// Background agent that has completed: tool_result is async launch,
+	// but a later task-notification indicates completion via <tool-use-id>.
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "conversation.jsonl")
+
+	lines := []string{
+		// Agent launched in background
+		`{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_bg1","name":"Agent","input":{"description":"BG task","prompt":"Do background work","subagent_type":"general-task-executor","run_in_background":true}}]}}`,
+		// Immediate tool_result (launch confirmation)
+		`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_bg1","content":"Async agent launched successfully.\nagentId: abc123"}]}}`,
+		// Later: task-notification indicating completion
+		`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_other","content":"some result\n<system-reminder>\nA background agent completed a task:\n<task-notification>\n<task-id>abc123</task-id>\n<tool-use-id>toolu_bg1</tool-use-id>\n<status>completed</status>\n<summary>Agent completed</summary>\n<result>Done</result>\n</task-notification>\n</system-reminder>"}]}}`,
+	}
+	content := strings.Join(lines, "\n") + "\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	descriptions, err := ExtractAgentDescriptions(path)
+	if err != nil {
+		t.Fatalf("ExtractAgentDescriptions() error = %v", err)
+	}
+	if len(descriptions) != 1 {
+		t.Fatalf("got %d descriptions, want 1", len(descriptions))
+	}
+	if descriptions[0].Status != SubagentClosed {
+		t.Errorf("Status = %q, want %q (background agent with task-notification should be closed)", descriptions[0].Status, SubagentClosed)
+	}
+}
+
+func TestExtractAgentDescriptions_BackgroundAgentStillRunning(t *testing.T) {
+	// Background agent without task-notification should remain running.
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "conversation.jsonl")
+
+	lines := []string{
+		`{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_bg2","name":"Agent","input":{"description":"Running task","prompt":"Still working","subagent_type":"general-task-executor","run_in_background":true}}]}}`,
+		`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_bg2","content":"Async agent launched successfully.\nagentId: def456"}]}}`,
+	}
+	content := strings.Join(lines, "\n") + "\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	descriptions, err := ExtractAgentDescriptions(path)
+	if err != nil {
+		t.Fatalf("ExtractAgentDescriptions() error = %v", err)
+	}
+	if len(descriptions) != 1 {
+		t.Fatalf("got %d descriptions, want 1", len(descriptions))
+	}
+	if descriptions[0].Status != SubagentRunning {
+		t.Errorf("Status = %q, want %q (background agent without notification should be running)", descriptions[0].Status, SubagentRunning)
+	}
+}
+
 func TestExtractAgentDescriptions_FileNotFound(t *testing.T) {
 	_, err := ExtractAgentDescriptions("/nonexistent/path/conversation.jsonl")
 	if err == nil {

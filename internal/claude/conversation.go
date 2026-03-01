@@ -267,6 +267,34 @@ func isAsyncLaunchResult(content json.RawMessage) bool {
 	return strings.Contains(string(content), "Async agent launched")
 }
 
+// extractCompletedToolUseIDs scans raw content for task-notification tags
+// indicating background agent completion. Returns tool_use IDs that have
+// completed based on <tool-use-id> and <status>completed</status> pairs.
+func extractCompletedToolUseIDs(content string) []string {
+	var ids []string
+	remaining := content
+	for {
+		// Find next <tool-use-id>...</tool-use-id>
+		start := strings.Index(remaining, "<tool-use-id>")
+		if start == -1 {
+			break
+		}
+		start += len("<tool-use-id>")
+		end := strings.Index(remaining[start:], "</tool-use-id>")
+		if end == -1 {
+			break
+		}
+		id := remaining[start : start+end]
+		// Check if <status>completed</status> follows within this notification
+		afterTag := remaining[start+end:]
+		if strings.Contains(afterTag, "<status>completed</status>") {
+			ids = append(ids, id)
+		}
+		remaining = remaining[start+end:]
+	}
+	return ids
+}
+
 // ExtractAgentDescriptions parses a parent conversation JSONL file and extracts
 // Agent tool_use descriptions. Returns a slice of AgentDescription in the order they appear,
 // with Status set to SubagentRunning or SubagentClosed based on whether a corresponding
@@ -365,6 +393,13 @@ func ExtractAgentDescriptionsIncremental(parentPath string, offset int64, cache 
 		var rawBlocks []rawContentBlock
 		if err := json.Unmarshal(msg.Content, &rawBlocks); err != nil {
 			continue
+		}
+
+		// Check all messages for task-notification completion signals.
+		// Background agents emit <task-notification> with <tool-use-id> and
+		// <status>completed</status> when they finish.
+		for _, completedID := range extractCompletedToolUseIDs(string(msg.Content)) {
+			cache.completedIDs[completedID] = true
 		}
 
 		switch rl.Type {
