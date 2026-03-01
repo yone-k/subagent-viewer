@@ -412,6 +412,73 @@ func TestConversationView_FilterCursorNavigation(t *testing.T) {
 	}
 }
 
+func TestWordWrap(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		width int
+		want  string
+	}{
+		{
+			name:  "simple text no wrap needed",
+			input: "hello world",
+			width: 80,
+			want:  "hello world",
+		},
+		{
+			name:  "wraps long line",
+			input: "aaa bbb ccc",
+			width: 7,
+			want:  "aaa bbb\nccc",
+		},
+		{
+			name:  "preserves leading indentation",
+			input: "    indented text",
+			width: 80,
+			want:  "    indented text",
+		},
+		{
+			name:  "preserves consecutive spaces",
+			input: "key:  value",
+			width: 80,
+			want:  "key:  value",
+		},
+		{
+			name:  "preserves multi-level JSON-like indentation",
+			input: "{\n  \"key\": {\n    \"nested\": true\n  }\n}",
+			width: 80,
+			want:  "{\n  \"key\": {\n    \"nested\": true\n  }\n}",
+		},
+		{
+			name:  "preserves empty lines in multiline text",
+			input: "line1\n\nline3",
+			width: 80,
+			want:  "line1\n\nline3",
+		},
+		{
+			name:  "width zero returns input unchanged",
+			input: "hello world",
+			width: 0,
+			want:  "hello world",
+		},
+		{
+			name:  "preserves 4-space indentation across lines",
+			input: "    line1\n    line2\n        deep",
+			width: 80,
+			want:  "    line1\n    line2\n        deep",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := wordWrap(tt.input, tt.width)
+			if got != tt.want {
+				t.Errorf("wordWrap(%q, %d)\ngot:  %q\nwant: %q", tt.input, tt.width, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRenderContentBlock(t *testing.T) {
 	tests := []struct {
 		name     string

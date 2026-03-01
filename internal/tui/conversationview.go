@@ -321,27 +321,37 @@ func renderContentBlock(block claude.ContentBlock, width int) []string {
 }
 
 // wordWrap wraps text at word boundaries to fit within the given width.
+// It preserves consecutive spaces and leading indentation by using
+// strings.Split instead of strings.Fields.
 func wordWrap(text string, width int) string {
 	if width <= 0 {
 		return text
 	}
 
 	var result strings.Builder
-	for _, line := range strings.Split(text, "\n") {
-		if result.Len() > 0 {
+	for i, line := range strings.Split(text, "\n") {
+		if i > 0 {
 			result.WriteString("\n")
 		}
-		words := strings.Fields(line)
-		if len(words) == 0 {
+		// Use Split to preserve consecutive spaces as empty elements
+		words := strings.Split(line, " ")
+
+		// Empty line (original line was "")
+		if len(words) == 1 && words[0] == "" {
 			continue
 		}
 
 		currentLineLen := 0
-		for i, word := range words {
+		for j, word := range words {
 			wordLen := lipgloss.Width(word)
-			if i == 0 {
+			if j == 0 {
+				// First element: write directly (may be "" for leading spaces)
 				result.WriteString(word)
 				currentLineLen = wordLen
+			} else if word == "" {
+				// Empty element from consecutive spaces: write a space to preserve it
+				result.WriteString(" ")
+				currentLineLen++
 			} else if currentLineLen+1+wordLen > width {
 				result.WriteString("\n")
 				result.WriteString(word)

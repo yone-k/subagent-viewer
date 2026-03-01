@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/yone/subagent-viewer/internal/claude"
@@ -30,7 +31,24 @@ func parseArgs(args []string) (runMode, string) {
 		return modeError, sessionID
 	}
 
-	return modeViewer, sessionID
+	return modeViewer, strings.ToLower(sessionID)
+}
+
+// programRunner is the interface for models that can be managed by runProgram.
+type programRunner interface {
+	tea.Model
+	SetProgram(p *tea.Program)
+	Cleanup()
+}
+
+// runProgram creates a tea.Program, wires it to the model, and runs it.
+func runProgram(model programRunner, opts ...tea.ProgramOption) error {
+	p := tea.NewProgram(model, opts...)
+	model.SetProgram(p)
+	defer model.Cleanup()
+
+	_, err := p.Run()
+	return err
 }
 
 func main() {
@@ -44,13 +62,9 @@ func main() {
 	case modeViewer:
 		// Direct session mode
 		session := claude.BuildSessionInfo(claude.ClaudeDir(), claude.GlobalConfigPath(), sessionID)
-
 		model := tui.NewAppModelWithSession(session)
-		p := tea.NewProgram(&model, tea.WithAltScreen())
-		model.SetProgram(p)
-		defer model.Cleanup()
 
-		if _, err := p.Run(); err != nil {
+		if err := runProgram(&model, tea.WithAltScreen()); err != nil {
 			fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
 			os.Exit(1)
 		}
@@ -64,11 +78,7 @@ func main() {
 		}
 
 		model := tui.NewAppModel(sessions)
-		p := tea.NewProgram(&model, tea.WithAltScreen())
-		model.SetProgram(p)
-		defer model.Cleanup()
-
-		if _, err := p.Run(); err != nil {
+		if err := runProgram(&model, tea.WithAltScreen()); err != nil {
 			fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
 			os.Exit(1)
 		}

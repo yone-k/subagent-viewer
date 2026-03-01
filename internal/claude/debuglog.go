@@ -110,11 +110,12 @@ func ReadLogTail(path string, maxLines int) ([]LogEntry, int64, error) {
 	}
 
 	// Read the file from the end in chunks, collecting enough log-start lines.
-	// Chunks are stored in reverse order in a slice, then joined at the end
-	// to avoid O(n^2) copying from repeated prepend operations.
+	// Chunks are appended in reverse file order (last chunk first), then
+	// reversed before joining to restore the original byte order.
+	// This avoids O(n^2) copying from repeated slice prepend operations.
 	var chunks [][]byte
-	var totalBytes int
 	offset := fileSize
+	logStartCount := 0
 
 	for offset > 0 {
 		chunkSize := int64(seekChunkSize)
@@ -128,19 +129,16 @@ func ReadLogTail(path string, maxLines int) ([]LogEntry, int64, error) {
 		if err != nil && err != io.EOF {
 			return nil, 0, err
 		}
-		// Prepend to chunks slice (stored in reverse read order).
-		chunks = append([][]byte{buf}, chunks...)
-		totalBytes += len(buf)
+		// Append in reverse file order (newest chunk at index 0 after reversal).
+		chunks = append(chunks, buf)
 
-		// Count how many log-start lines we have so far.
+		// Count log-start lines in the new chunk to decide whether we have enough.
 		// We need more than maxLines because we want exactly maxLines entries
 		// (continuation lines do not count).
 		// Note: chunk boundaries may split a line, but since we collect
 		// maxLines+alpha log-start lines, the final tail of N entries is unaffected.
-		collected := bytes.Join(chunks, nil)
-		lines := splitLines(string(collected))
-		logStartCount := 0
-		for _, l := range lines {
+		chunkLines := splitLines(string(buf))
+		for _, l := range chunkLines {
 			if isLogLine(l) {
 				logStartCount++
 			}
@@ -153,7 +151,10 @@ func ReadLogTail(path string, maxLines int) ([]LogEntry, int64, error) {
 		}
 	}
 
-	// Parse all collected lines, then take the last maxLines entries.
+	// Reverse chunks to restore original file order, then join.
+	for i, j := 0, len(chunks)-1; i < j; i, j = i+1, j-1 {
+		chunks[i], chunks[j] = chunks[j], chunks[i]
+	}
 	collected := bytes.Join(chunks, nil)
 	lines := splitLines(string(collected))
 	entries := parseLines(lines)

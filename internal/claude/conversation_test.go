@@ -166,13 +166,13 @@ func TestEnrichSubagentsWithDescriptions(t *testing.T) {
 	agents := []SubagentInfo{
 		{
 			AgentID: "agent1",
-			// Prompt is the full prompt (within 60 chars)
-			Prompt: "Analyze the project structure and list all directories and k",
+			// Prompt is the full prompt (within 120 chars)
+			Prompt: truncateString("Analyze the project structure and list all directories and key files. Focus on understanding the architecture.", 120),
 		},
 		{
 			AgentID: "agent2",
-			// Prompt truncated to 60 chars by ParseConversationFile
-			Prompt: truncateString("Add user authentication using JWT tokens. Create the auth middleware and login endpoint.", 60),
+			// Prompt truncated to 120 chars by ParseConversationFile
+			Prompt: truncateString("Add user authentication using JWT tokens. Create the auth middleware and login endpoint.", 120),
 		},
 	}
 
@@ -189,6 +189,52 @@ func TestEnrichSubagentsWithDescriptions(t *testing.T) {
 	}
 	if agents[1].SubagentType != "general-task-executor" {
 		t.Errorf("agents[1].SubagentType = %q, want %q", agents[1].SubagentType, "general-task-executor")
+	}
+}
+
+func TestEnrichSubagentsWithDescriptions_ExactMatchPriority(t *testing.T) {
+	// When the prompt matches a key exactly, it should be used even if
+	// another key also has the same prefix.
+	descriptions := map[string]AgentDescription{
+		"Fix the bug":                          {Description: "exact match", SubagentType: "exact"},
+		"Fix the bug in the authentication module": {Description: "prefix match", SubagentType: "prefix"},
+	}
+
+	agents := []SubagentInfo{
+		{
+			AgentID: "agent1",
+			Prompt:  "Fix the bug",
+		},
+	}
+
+	EnrichSubagentsWithDescriptions(agents, descriptions)
+
+	if agents[0].Description != "exact match" {
+		t.Errorf("agents[0].Description = %q, want %q (exact match should be preferred)", agents[0].Description, "exact match")
+	}
+	if agents[0].SubagentType != "exact" {
+		t.Errorf("agents[0].SubagentType = %q, want %q", agents[0].SubagentType, "exact")
+	}
+}
+
+func TestEnrichSubagentsWithDescriptions_PrefixFallback(t *testing.T) {
+	// When no exact match exists, prefix match should be used as fallback.
+	longPrompt := "This is a very long prompt that exceeds one hundred and twenty characters so it will be truncated by ParseConversationEntries to test prefix matching behavior"
+	descriptions := map[string]AgentDescription{
+		longPrompt: {Description: "found via prefix", SubagentType: "prefix-type"},
+	}
+
+	agents := []SubagentInfo{
+		{
+			AgentID: "agent1",
+			Prompt:  truncateString(longPrompt, 120),
+		},
+	}
+
+	EnrichSubagentsWithDescriptions(agents, descriptions)
+
+	if agents[0].Description != "found via prefix" {
+		t.Errorf("agents[0].Description = %q, want %q", agents[0].Description, "found via prefix")
 	}
 }
 

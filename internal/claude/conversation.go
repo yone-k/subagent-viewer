@@ -156,7 +156,7 @@ func ParseConversationEntries(r io.Reader) ([]ConversationEntry, *SubagentInfo, 
 	// Finalize SubagentInfo
 	if info != nil {
 		info.EntryCount = len(entries)
-		info.Prompt = truncateString(firstUserPrompt, 60)
+		info.Prompt = truncateString(firstUserPrompt, 120)
 	}
 
 	return entries, info, nil
@@ -309,16 +309,27 @@ func ExtractAgentDescriptions(parentPath string) (map[string]AgentDescription, e
 }
 
 // EnrichSubagentsWithDescriptions matches subagents with descriptions extracted
-// from the parent conversation. Matching is done by comparing the agent's Prompt
-// (truncated to 60 chars) as a prefix of the full prompt keys. When multiple keys
-// share the same prefix, the shortest (most specific) key is chosen; ties in length
-// are broken by lexicographic order (smallest key wins) for determinism.
+// from the parent conversation. Matching strategy:
+//  1. Exact match: if the agent's Prompt exactly matches a key, use it immediately.
+//  2. Prefix match (fallback): compare the agent's Prompt (truncated to 120 chars)
+//     as a prefix of the full prompt keys. When multiple keys share the same prefix,
+//     the shortest (most specific) key is chosen; ties in length are broken by
+//     lexicographic order (smallest key wins) for determinism.
 func EnrichSubagentsWithDescriptions(agents []SubagentInfo, descriptions map[string]AgentDescription) {
 	for i := range agents {
 		prompt := agents[i].Prompt
 		if prompt == "" {
 			continue
 		}
+
+		// 1. Try exact match first
+		if desc, ok := descriptions[prompt]; ok {
+			agents[i].Description = desc.Description
+			agents[i].SubagentType = desc.SubagentType
+			continue
+		}
+
+		// 2. Fallback to prefix match
 		promptRunes := []rune(prompt)
 		bestKey := ""
 		for key := range descriptions {

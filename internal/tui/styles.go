@@ -149,6 +149,32 @@ var (
 		Faint(true)
 )
 
+// renderListItem renders a list item with selection-aware styling.
+// When selected, the label uses SelectedLabelStyle and details use SelectedDetailStyle.
+// When not selected, the label is rendered as plain text and details use DimStyle.
+// The prefix is "> " for selected items and "  " for unselected items.
+// details are appended after the label in the appropriate style.
+func renderListItem(selected bool, label string, details ...string) string {
+	prefix := "  "
+	if selected {
+		prefix = "> "
+	}
+
+	var line string
+	if selected {
+		line = prefix + SelectedLabelStyle.Render(label)
+		for _, d := range details {
+			line += SelectedDetailStyle.Render(d)
+		}
+	} else {
+		line = prefix + label
+		for _, d := range details {
+			line += DimStyle.Render(d)
+		}
+	}
+	return line
+}
+
 // truncateText replaces newlines with spaces and truncates to maxWidth display columns, appending "..." if needed.
 // Uses display width (East Asian full-width characters count as 2 columns) for accurate TUI rendering.
 func truncateText(s string, maxWidth int) string {

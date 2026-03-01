@@ -13,7 +13,7 @@ func TestParseArgs(t *testing.T) {
 	}{
 		{"no args", []string{"cmd"}, modeSelector, ""},
 		{"valid lowercase UUID", []string{"cmd", "550e8400-e29b-41d4-a716-446655440000"}, modeViewer, "550e8400-e29b-41d4-a716-446655440000"},
-		{"valid uppercase UUID", []string{"cmd", "550E8400-E29B-41D4-A716-446655440000"}, modeViewer, "550E8400-E29B-41D4-A716-446655440000"},
+		{"valid uppercase UUID", []string{"cmd", "550E8400-E29B-41D4-A716-446655440000"}, modeViewer, "550e8400-e29b-41d4-a716-446655440000"},
 		{"invalid session ID", []string{"cmd", "not-a-uuid"}, modeError, "not-a-uuid"},
 		{"extra args ignored", []string{"cmd", "550e8400-e29b-41d4-a716-446655440000", "extra"}, modeViewer, "550e8400-e29b-41d4-a716-446655440000"},
 	}

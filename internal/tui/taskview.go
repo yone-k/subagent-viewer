@@ -58,8 +58,11 @@ func (m TaskViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !found {
 			m.tasks = append(m.tasks, msg.Task)
 			sort.Slice(m.tasks, func(i, j int) bool {
-				ni, _ := strconv.Atoi(m.tasks[i].ID)
-				nj, _ := strconv.Atoi(m.tasks[j].ID)
+				ni, errI := strconv.Atoi(m.tasks[i].ID)
+				nj, errJ := strconv.Atoi(m.tasks[j].ID)
+				if errI != nil || errJ != nil {
+					return m.tasks[i].ID < m.tasks[j].ID
+				}
 				return ni < nj
 			})
 		}
@@ -111,44 +114,22 @@ func (m TaskViewModel) viewTasks() string {
 	// Task list
 	for i, task := range m.tasks {
 		icon := statusIcon(task)
-		prefix := "  "
-		if i == m.selected {
-			prefix = "> "
+
+		// Build detail parts
+		var details []string
+		if len(task.BlockedBy) > 0 {
+			refs := make([]string, len(task.BlockedBy))
+			for j, id := range task.BlockedBy {
+				refs[j] = "#" + id
+			}
+			details = append(details, fmt.Sprintf(" (blocked by %s)", strings.Join(refs, ", ")))
+		}
+		if task.Status == "in_progress" && task.ActiveForm != "" {
+			details = append(details, fmt.Sprintf(" — %s", task.ActiveForm))
 		}
 
-		if i == m.selected {
-			line := fmt.Sprintf("%s%s %s", prefix, icon, SelectedLabelStyle.Render(task.Subject))
-
-			if len(task.BlockedBy) > 0 {
-				refs := make([]string, len(task.BlockedBy))
-				for j, id := range task.BlockedBy {
-					refs[j] = "#" + id
-				}
-				line += SelectedDetailStyle.Render(fmt.Sprintf(" (blocked by %s)", strings.Join(refs, ", ")))
-			}
-
-			if task.Status == "in_progress" && task.ActiveForm != "" {
-				line += SelectedDetailStyle.Render(fmt.Sprintf(" — %s", task.ActiveForm))
-			}
-
-			b.WriteString(line + "\n")
-		} else {
-			line := fmt.Sprintf("%s%s %s", prefix, icon, task.Subject)
-
-			if len(task.BlockedBy) > 0 {
-				refs := make([]string, len(task.BlockedBy))
-				for j, id := range task.BlockedBy {
-					refs[j] = "#" + id
-				}
-				line += DimStyle.Render(fmt.Sprintf(" (blocked by %s)", strings.Join(refs, ", ")))
-			}
-
-			if task.Status == "in_progress" && task.ActiveForm != "" {
-				line += DimStyle.Render(fmt.Sprintf(" — %s", task.ActiveForm))
-			}
-
-			b.WriteString(line + "\n")
-		}
+		label := fmt.Sprintf("%s %s", icon, task.Subject)
+		b.WriteString(renderListItem(i == m.selected, label, details...) + "\n")
 
 		// Show detail for selected task
 		if i == m.selected && m.showDetail && task.Description != "" {

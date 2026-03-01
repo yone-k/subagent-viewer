@@ -8,9 +8,6 @@ import (
 	"github.com/yone/subagent-viewer/internal/claude"
 )
 
-// SessionSelectedMsg is sent when a session is selected.
-// (This type will be defined in selector.go)
-
 func TestSelectorModel_Init(t *testing.T) {
 	sessions := []claude.SessionInfo{
 		{SessionID: "s1", Project: "/test/proj", Timestamp: 1000, FirstInput: "hello"},

@@ -1,7 +1,8 @@
 package claude
 
 import (
-	"encoding/json"
+	"errors"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -63,18 +64,12 @@ func DiscoverSessions(basePath, configPath string) ([]SessionInfo, error) {
 		}
 		sd.inputs = append(sd.inputs, e.Display)
 	}
-	projectStats := make(map[string]*ProjectStats)
-	if data, err := os.ReadFile(configPath); err != nil {
-		if !os.IsNotExist(err) {
-			log.Printf("warning: failed to read config file %s: %v", configPath, err)
+	projectStats, err := loadGlobalConfig(configPath)
+	if err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			log.Printf("warning: failed to load config file %s: %v", configPath, err)
 		}
-	} else {
-		var cfg globalConfig
-		if jsonErr := json.Unmarshal(data, &cfg); jsonErr != nil {
-			log.Printf("warning: failed to parse config file %s: %v", configPath, jsonErr)
-		} else {
-			projectStats = cfg.Projects
-		}
+		projectStats = make(map[string]*ProjectStats)
 	}
 
 	// Build SessionInfo list
@@ -156,14 +151,11 @@ func BuildSessionInfo(basePath, configPath, sessionID string) SessionInfo {
 	}
 
 	// Try to load stats from config (project unknown, so iterate to find matching session)
-	if data, err := os.ReadFile(configPath); err == nil {
-		var cfg globalConfig
-		if jsonErr := json.Unmarshal(data, &cfg); jsonErr == nil {
-			for _, stats := range cfg.Projects {
-				if stats.LastSessionID == sessionID {
-					info.Stats = stats
-					break
-				}
+	if projects, err := loadGlobalConfig(configPath); err == nil {
+		for _, stats := range projects {
+			if stats.LastSessionID == sessionID {
+				info.Stats = stats
+				break
 			}
 		}
 	}

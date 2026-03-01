@@ -146,11 +146,6 @@ func (m AgentViewModel) viewAgents() string {
 	b.WriteString("\n\n")
 
 	for i, agent := range m.agents {
-		prefix := "  "
-		if i == m.agentSelected {
-			prefix = "> "
-		}
-
 		label := agent.Description
 		if label == "" {
 			label = agent.Slug
@@ -166,21 +161,18 @@ func (m AgentViewModel) viewAgents() string {
 		}
 		prompt := truncateText(agent.Prompt, maxPromptWidth)
 
-		if i == m.agentSelected {
-			line := fmt.Sprintf("%s%s", prefix, SelectedLabelStyle.Render(label))
-			if agent.SubagentType != "" {
-				line += SelectedDetailStyle.Render(fmt.Sprintf(" [%s]", agent.SubagentType))
-			}
-			line += SelectedDetailStyle.Render(fmt.Sprintf("  (%d entries)", agent.EntryCount))
-			b.WriteString(line + "\n")
+		// Build detail parts
+		var details []string
+		if agent.SubagentType != "" {
+			details = append(details, fmt.Sprintf(" [%s]", agent.SubagentType))
+		}
+		details = append(details, fmt.Sprintf("  (%d entries)", agent.EntryCount))
+
+		selected := i == m.agentSelected
+		b.WriteString(renderListItem(selected, label, details...) + "\n")
+		if selected {
 			b.WriteString(fmt.Sprintf("    %s\n", SelectedDetailStyle.Render(prompt)))
 		} else {
-			line := fmt.Sprintf("%s%s", prefix, label)
-			if agent.SubagentType != "" {
-				line += DimStyle.Render(fmt.Sprintf(" [%s]", agent.SubagentType))
-			}
-			line += DimStyle.Render(fmt.Sprintf("  (%d entries)", agent.EntryCount))
-			b.WriteString(line + "\n")
 			b.WriteString(fmt.Sprintf("    %s\n", DimStyle.Render(prompt)))
 		}
 		if i < len(m.agents)-1 {

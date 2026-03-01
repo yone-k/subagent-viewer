@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,7 +99,9 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.selector.SetSize(msg.Width, msg.Height)
+		if m.state == StateSelector {
+			m.selector.SetSize(msg.Width, msg.Height)
+		}
 		contentHeight := msg.Height - headerAndTabsHeight
 		m.taskView.SetSize(msg.Width, contentHeight)
 		m.agentView.SetSize(msg.Width, contentHeight)
@@ -130,6 +133,8 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case startWatchersMsg:
 		if m.program != nil {
 			m.StartWatchers(m.program)
+		} else {
+			log.Println("warning: program is nil, skipping watcher start")
 		}
 		return m, nil
 

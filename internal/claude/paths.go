@@ -18,7 +18,7 @@ func ensureHomeDir() {
 		var err error
 		homeDir, err = os.UserHomeDir()
 		if err != nil {
-			homeDir = ""
+			panic(fmt.Sprintf("failed to determine home directory: %v", err))
 		}
 	})
 }

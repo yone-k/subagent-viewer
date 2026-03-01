@@ -70,7 +70,7 @@ func (fw *FileWatcher) Start(ctx context.Context) {
 					debounceTimer = time.AfterFunc(debounceInterval, func() {
 						groups, err := claude.LoadFileHistory(fw.dir)
 						if err != nil {
-							fw.program.Send(WatcherErrorMsg{Source: "files", Err: err})
+							fw.program.Send(WatcherErrorMsg{Source: "file-history", Err: err})
 							return
 						}
 						fw.program.Send(FileHistoryUpdatedMsg{Groups: groups})
@@ -80,7 +80,7 @@ func (fw *FileWatcher) Start(ctx context.Context) {
 				if !ok {
 					return
 				}
-				fw.program.Send(WatcherErrorMsg{Source: "files", Err: err})
+				fw.program.Send(WatcherErrorMsg{Source: "file-history", Err: err})
 			}
 		}
 	}()

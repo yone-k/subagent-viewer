@@ -29,9 +29,9 @@ type globalConfig struct {
 	Projects map[string]*ProjectStats `json:"projects"`
 }
 
-// LoadProjectStats loads project statistics from the global config file.
-// Returns nil (not error) if the project is not found in config.
-func LoadProjectStats(configPath, projectPath string) (*ProjectStats, error) {
+// loadGlobalConfig reads and parses the global config file (.claude.json).
+// Returns the projects map (never nil) and any error encountered.
+func loadGlobalConfig(configPath string) (map[string]*ProjectStats, error) {
 	// .claude.json is typically small (< 100KB); full read is acceptable
 	data, err := os.ReadFile(configPath)
 	if err != nil {
@@ -41,7 +41,20 @@ func LoadProjectStats(configPath, projectPath string) (*ProjectStats, error) {
 	if err := json.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("parsing config JSON: %w", err)
 	}
-	stats, ok := config.Projects[projectPath]
+	if config.Projects == nil {
+		return make(map[string]*ProjectStats), nil
+	}
+	return config.Projects, nil
+}
+
+// LoadProjectStats loads project statistics from the global config file.
+// Returns nil (not error) if the project is not found in config.
+func LoadProjectStats(configPath, projectPath string) (*ProjectStats, error) {
+	projects, err := loadGlobalConfig(configPath)
+	if err != nil {
+		return nil, err
+	}
+	stats, ok := projects[projectPath]
 	if !ok {
 		return nil, nil
 	}
