@@ -228,16 +228,9 @@ func (m *AppModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.tabs.SetActive(4)
 		return m, nil
 	case key.Matches(msg, GlobalKeys.NextTab):
-		// In agent conversation mode, block tab key (used for pane switching)
-		if m.tabs.Active == 1 && m.agentView.Mode() == AgentViewModeConversation {
-			break // fall through to tab delegation below
-		}
 		m.tabs.NextTab()
 		return m, nil
 	case key.Matches(msg, GlobalKeys.PrevTab):
-		if m.tabs.Active == 1 && m.agentView.Mode() == AgentViewModeConversation {
-			break
-		}
 		m.tabs.PrevTab()
 		return m, nil
 	}
@@ -324,7 +317,7 @@ func (m *AppModel) footerHelp() string {
 		case AgentViewModeList:
 			return fmt.Sprintf("enter: 会話表示  1-5: タブ切替  q: 終了  %s", base)
 		case AgentViewModeConversation:
-			return fmt.Sprintf("j/k: 移動  tab: パネル切替  esc: 戻る  q: 終了  %s", base)
+			return fmt.Sprintf("j/k: スクロール  X/U/R/H: フィルタ  esc: 戻る  q: 終了  %s", base)
 		}
 	}
 

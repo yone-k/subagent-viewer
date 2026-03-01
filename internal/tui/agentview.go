@@ -35,6 +35,7 @@ func NewAgentViewModel() AgentViewModel {
 	return AgentViewModel{
 		conversations:    make(map[string][]claude.ConversationEntry),
 		conversationInfo: make(map[string]*claude.SubagentInfo),
+		conversationView: NewConversationViewModel(),
 	}
 }
 

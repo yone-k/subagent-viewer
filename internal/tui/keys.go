@@ -124,16 +124,31 @@ var FileKeys = FileKeyMap{
 	),
 }
 
-// ConversationKeyMap defines keybindings for the conversation split panel.
+// ConversationKeyMap defines keybindings for the conversation view.
 type ConversationKeyMap struct {
-	SwitchPane key.Binding
-	Escape     key.Binding
+	FilterText       key.Binding
+	FilterToolUse    key.Binding
+	FilterToolResult key.Binding
+	FilterThinking   key.Binding
+	Escape           key.Binding
 }
 
 var ConversationKeys = ConversationKeyMap{
-	SwitchPane: key.NewBinding(
-		key.WithKeys("tab"),
-		key.WithHelp("tab", "パネル切替"),
+	FilterText: key.NewBinding(
+		key.WithKeys("X"),
+		key.WithHelp("X", "Text"),
+	),
+	FilterToolUse: key.NewBinding(
+		key.WithKeys("U"),
+		key.WithHelp("U", "Tool"),
+	),
+	FilterToolResult: key.NewBinding(
+		key.WithKeys("R"),
+		key.WithHelp("R", "Result"),
+	),
+	FilterThinking: key.NewBinding(
+		key.WithKeys("H"),
+		key.WithHelp("H", "Thinking"),
 	),
 	Escape: key.NewBinding(
 		key.WithKeys("esc"),

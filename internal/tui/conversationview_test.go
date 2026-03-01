@@ -32,18 +32,21 @@ func testEntries() []claude.ConversationEntry {
 }
 
 var (
-	tabKey = tea.KeyMsg{Type: tea.KeyTab}
 	escKey = tea.KeyMsg{Type: tea.KeyEsc}
 	jKey   = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")}
 	kKey   = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")}
+	xKey   = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("X")}
+	uKey   = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("U")}
+	rKey   = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("R")}
+	hKey   = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("H")}
 )
 
 func TestConversationView_EmptyState(t *testing.T) {
 	m := newTestConversationView(nil)
 	view := m.View()
 
-	if !strings.Contains(view, "エントリなし") && !strings.Contains(view, "エントリを選択してください") {
-		t.Errorf("empty state should contain 'エントリなし' or 'エントリを選択してください', got:\n%s", view)
+	if !strings.Contains(view, "エントリなし") {
+		t.Errorf("empty state should contain 'エントリなし', got:\n%s", view)
 	}
 }
 
@@ -57,137 +60,139 @@ func TestConversationView_EmptyState_SetDataEmpty(t *testing.T) {
 	if !strings.Contains(view, "エントリなし") {
 		t.Errorf("empty entries should show 'エントリなし', got:\n%s", view)
 	}
-	if !strings.Contains(view, "エントリを選択してください") {
-		t.Errorf("empty entries should show 'エントリを選択してください' in detail pane, got:\n%s", view)
+}
+
+func TestConversationView_DefaultFilterShowsTextOnly(t *testing.T) {
+	m := newTestConversationView(testEntries())
+	view := m.View()
+
+	// Default filter: text=true, others=false
+	// Should show text entries
+	if !strings.Contains(view, "Hello") {
+		t.Error("default filter should show text content 'Hello'")
+	}
+	if !strings.Contains(view, "Hi there") {
+		t.Error("default filter should show text content 'Hi there'")
+	}
+
+	// Should NOT show tool_use, tool_result, thinking entries
+	if strings.Contains(view, "[TOOL]") {
+		t.Error("default filter should hide tool_use blocks")
+	}
+	if strings.Contains(view, "[TOOL_RESULT]") {
+		t.Error("default filter should hide tool_result blocks")
+	}
+	if strings.Contains(view, "[THINKING]") {
+		t.Error("default filter should hide thinking blocks")
 	}
 }
 
-func TestConversationView_PaneFocusSwitch(t *testing.T) {
+func TestConversationView_FilterToggle(t *testing.T) {
 	m := newTestConversationView(testEntries())
 
-	// Initially should be PaneEntryList
-	if m.focusPane != PaneEntryList {
-		t.Fatalf("initial focusPane = %d, want PaneEntryList (%d)", m.focusPane, PaneEntryList)
+	// Initially text=true. Toggle text off with X.
+	m, handled := m.Update(xKey)
+	if !handled {
+		t.Error("X key should be handled")
+	}
+	if m.filterTypes["text"] != false {
+		t.Error("after X, text filter should be false")
 	}
 
-	// Press tab -> PaneDetail
-	m, handled := m.Update(tabKey)
+	// Toggle tool_use on with U
+	m, handled = m.Update(uKey)
 	if !handled {
-		t.Error("tab should be handled")
+		t.Error("U key should be handled")
 	}
-	if m.focusPane != PaneDetail {
-		t.Errorf("after tab, focusPane = %d, want PaneDetail (%d)", m.focusPane, PaneDetail)
+	if m.filterTypes["tool_use"] != true {
+		t.Error("after U, tool_use filter should be true")
 	}
 
-	// Press tab again -> PaneEntryList
-	m, handled = m.Update(tabKey)
+	// Toggle tool_result on with R
+	m, handled = m.Update(rKey)
 	if !handled {
-		t.Error("tab should be handled")
+		t.Error("R key should be handled")
 	}
-	if m.focusPane != PaneEntryList {
-		t.Errorf("after second tab, focusPane = %d, want PaneEntryList (%d)", m.focusPane, PaneEntryList)
+	if m.filterTypes["tool_result"] != true {
+		t.Error("after R, tool_result filter should be true")
+	}
+
+	// Toggle thinking on with H
+	m, handled = m.Update(hKey)
+	if !handled {
+		t.Error("H key should be handled")
+	}
+	if m.filterTypes["thinking"] != true {
+		t.Error("after H, thinking filter should be true")
+	}
+
+	// Verify the view now shows tool/result/thinking but not text
+	view := m.View()
+	if strings.Contains(view, "Hello") || strings.Contains(view, "Hi there") {
+		t.Error("with text filter off, text content should not appear")
+	}
+	if !strings.Contains(view, "[TOOL]") {
+		t.Error("with tool_use filter on, [TOOL] should appear")
+	}
+	if !strings.Contains(view, "[TOOL_RESULT]") {
+		t.Error("with tool_result filter on, [TOOL_RESULT] should appear")
+	}
+	if !strings.Contains(view, "[THINKING]") {
+		t.Error("with thinking filter on, [THINKING] should appear")
 	}
 }
 
-func TestConversationView_LeftPaneNavigation(t *testing.T) {
+func TestConversationView_AllFiltersOffShowsMessage(t *testing.T) {
 	m := newTestConversationView(testEntries())
 
-	// Initially entrySelected=0
-	if m.entrySelected != 0 {
-		t.Fatalf("initial entrySelected = %d, want 0", m.entrySelected)
-	}
+	// Turn off text (the only default-on filter)
+	m, _ = m.Update(xKey)
 
-	// Move down with j
-	m, handled := m.Update(jKey)
-	if !handled {
-		t.Error("j key should be handled")
-	}
-	if m.entrySelected != 1 {
-		t.Errorf("after j, entrySelected = %d, want 1", m.entrySelected)
-	}
-
-	// Move down again
-	m, _ = m.Update(jKey)
-	if m.entrySelected != 2 {
-		t.Errorf("after second j, entrySelected = %d, want 2", m.entrySelected)
-	}
-
-	// Move up with k
-	m, _ = m.Update(kKey)
-	if m.entrySelected != 1 {
-		t.Errorf("after k, entrySelected = %d, want 1", m.entrySelected)
-	}
-
-	// Verify detailScroll resets on navigation: first set a nonzero detailScroll
-	m.detailScroll = 5
-	m, _ = m.Update(jKey)
-	if m.detailScroll != 0 {
-		t.Errorf("after entry navigation, detailScroll = %d, want 0 (should reset)", m.detailScroll)
-	}
-
-	// At the beginning, k should not go below 0
-	m.entrySelected = 0
-	m, _ = m.Update(kKey)
-	if m.entrySelected != 0 {
-		t.Errorf("at start after k, entrySelected = %d, want 0", m.entrySelected)
-	}
-
-	// At the end, j should not exceed len-1
-	m.entrySelected = len(m.entries) - 1
-	m, _ = m.Update(jKey)
-	if m.entrySelected != len(m.entries)-1 {
-		t.Errorf("at end after j, entrySelected = %d, want %d", m.entrySelected, len(m.entries)-1)
+	view := m.View()
+	if !strings.Contains(view, "フィルタ条件に一致するエントリなし") {
+		t.Errorf("all filters off should show 'フィルタ条件に一致するエントリなし', got:\n%s", view)
 	}
 }
 
-func TestConversationView_RightPaneScroll(t *testing.T) {
-	// Create an entry with many lines of text to enable scrolling
+func TestConversationView_Scroll(t *testing.T) {
+	// Create entries with enough text lines to require scrolling
 	longText := strings.Repeat("This is a line of text.\n", 50)
 	entries := []claude.ConversationEntry{
 		{Type: claude.EntryTypeAssistant, Content: []claude.ContentBlock{{Type: "text", Text: longText}}},
 	}
 	m := newTestConversationView(entries)
 
-	// Switch to detail pane
-	m, _ = m.Update(tabKey)
-	if m.focusPane != PaneDetail {
-		t.Fatalf("focusPane = %d, want PaneDetail", m.focusPane)
-	}
-
-	// Render once to populate detailLines
-	_ = m.View()
-
-	// Initially detailScroll=0
-	if m.detailScroll != 0 {
-		t.Fatalf("initial detailScroll = %d, want 0", m.detailScroll)
+	// Initially scrollOffset=0
+	if m.scrollOffset != 0 {
+		t.Fatalf("initial scrollOffset = %d, want 0", m.scrollOffset)
 	}
 
 	// Scroll down with j
 	m, handled := m.Update(jKey)
 	if !handled {
-		t.Error("j key should be handled in detail pane")
+		t.Error("j key should be handled")
 	}
-	if m.detailScroll != 1 {
-		t.Errorf("after j in detail pane, detailScroll = %d, want 1", m.detailScroll)
+	if m.scrollOffset != 1 {
+		t.Errorf("after j, scrollOffset = %d, want 1", m.scrollOffset)
 	}
 
 	// Scroll down more
 	m, _ = m.Update(jKey)
-	if m.detailScroll != 2 {
-		t.Errorf("after second j in detail pane, detailScroll = %d, want 2", m.detailScroll)
+	if m.scrollOffset != 2 {
+		t.Errorf("after second j, scrollOffset = %d, want 2", m.scrollOffset)
 	}
 
 	// Scroll up with k
 	m, _ = m.Update(kKey)
-	if m.detailScroll != 1 {
-		t.Errorf("after k in detail pane, detailScroll = %d, want 1", m.detailScroll)
+	if m.scrollOffset != 1 {
+		t.Errorf("after k, scrollOffset = %d, want 1", m.scrollOffset)
 	}
 
 	// At 0, k should not go negative
-	m.detailScroll = 0
+	m.scrollOffset = 0
 	m, _ = m.Update(kKey)
-	if m.detailScroll != 0 {
-		t.Errorf("at top after k, detailScroll = %d, want 0", m.detailScroll)
+	if m.scrollOffset != 0 {
+		t.Errorf("at top after k, scrollOffset = %d, want 0", m.scrollOffset)
 	}
 }
 
@@ -200,14 +205,63 @@ func TestConversationView_EscapeReturns(t *testing.T) {
 	}
 }
 
-func TestConversationView_DetailShowsFullContent(t *testing.T) {
-	toolInput := `{"command":"ls -la","path":"/home/user"}`
+func TestConversationView_FilterBar(t *testing.T) {
+	m := newTestConversationView(testEntries())
+	view := m.View()
+
+	// Filter bar should be rendered
+	if !strings.Contains(view, "Filter:") {
+		t.Error("view should contain filter bar with 'Filter:'")
+	}
+}
+
+func TestConversationView_SetDataResetsState(t *testing.T) {
+	m := newTestConversationView(testEntries())
+
+	// Simulate scrolling
+	m.scrollOffset = 5
+
+	// SetData should reset scroll state
+	m.SetData("new-agent", []claude.ConversationEntry{
+		{Type: claude.EntryTypeUser, Content: []claude.ContentBlock{{Type: "text", Text: "New"}}},
+	}, nil)
+
+	if m.scrollOffset != 0 {
+		t.Errorf("after SetData, scrollOffset = %d, want 0", m.scrollOffset)
+	}
+	if m.agentID != "new-agent" {
+		t.Errorf("after SetData, agentID = %q, want %q", m.agentID, "new-agent")
+	}
+	if !m.filteredDirty {
+		t.Error("after SetData, filteredDirty should be true")
+	}
+}
+
+func TestConversationView_UpdateEntriesMarksDirty(t *testing.T) {
+	entries := testEntries()
+	m := newTestConversationView(entries)
+
+	// Build cache through Update() round-trip (value receiver + clampScroll triggers filteredBlocks)
+	m, _ = m.Update(uKey) // toggle filter on
+	m, _ = m.Update(uKey) // toggle back to original
+	if m.filteredDirty {
+		t.Fatal("after filter round-trip, filteredDirty should be false")
+	}
+
+	// UpdateEntries should set dirty
+	m.UpdateEntries(entries, nil)
+	if !m.filteredDirty {
+		t.Error("after UpdateEntries, filteredDirty should be true")
+	}
+}
+
+func TestConversationView_ContentBlockRendering(t *testing.T) {
 	entries := []claude.ConversationEntry{
 		{
 			Type: claude.EntryTypeAssistant,
 			Content: []claude.ContentBlock{
 				{Type: "text", Text: "Here is the result"},
-				{Type: "tool_use", ToolName: "Bash", ToolInput: toolInput},
+				{Type: "tool_use", ToolName: "Bash", ToolInput: `{"command":"ls -la"}`},
 			},
 		},
 		{
@@ -223,114 +277,108 @@ func TestConversationView_DetailShowsFullContent(t *testing.T) {
 			},
 		},
 	}
-
 	m := newTestConversationView(entries)
 
-	// Select entry 0 (tool_use)
-	m.entrySelected = 0
+	// Enable all filters
+	m, _ = m.Update(uKey) // tool_use on
+	m, _ = m.Update(rKey) // tool_result on
+	m, _ = m.Update(hKey) // thinking on
+
 	view := m.View()
 
+	if !strings.Contains(view, "Here is the result") {
+		t.Error("view should show text content")
+	}
 	if !strings.Contains(view, "[TOOL]") {
-		t.Error("detail should show [TOOL] tag for tool_use block")
+		t.Error("view should show [TOOL] tag for tool_use block")
 	}
 	if !strings.Contains(view, "Bash") {
-		t.Error("detail should show tool name 'Bash'")
+		t.Error("view should show tool name 'Bash'")
 	}
-	// Tool input should be shown (formatted JSON includes keys)
 	if !strings.Contains(view, "command") {
-		t.Error("detail should show tool input content (key 'command')")
+		t.Error("view should show tool input content")
 	}
-	if !strings.Contains(view, "Here is the result") {
-		t.Error("detail should show text block content")
+	if !strings.Contains(view, "[TOOL_RESULT]") {
+		t.Error("view should show [TOOL_RESULT] tag for tool_result block")
 	}
-
-	// Select entry 1 (tool_result)
-	m.entrySelected = 1
-	view = m.View()
-
 	if !strings.Contains(view, "total 42") {
-		t.Error("detail should show full tool_result text without truncation")
+		t.Error("view should show tool_result text")
 	}
-	if !strings.Contains(view, "file.txt") {
-		t.Error("detail should show the complete tool_result content")
-	}
-
-	// Select entry 2 (thinking)
-	m.entrySelected = 2
-	view = m.View()
-
-	if !strings.Contains(view, "[thinking]") {
-		t.Error("detail should show [thinking] tag")
+	if !strings.Contains(view, "[THINKING]") {
+		t.Error("view should show [THINKING] tag for thinking block")
 	}
 	if !strings.Contains(view, "The user wants to see directory listing") {
-		t.Error("detail should show full thinking text without truncation")
+		t.Error("view should show thinking text")
 	}
 }
 
-func TestConversationView_SetDataResetsState(t *testing.T) {
-	m := newTestConversationView(testEntries())
-
-	// Simulate user navigation to put the model in a non-zero state
-	m.entrySelected = 3
-	m.entryScroll = 2
-	m.detailScroll = 5
-	m.focusPane = PaneDetail
-
-	// SetData should reset scroll state
-	m.SetData("new-agent", []claude.ConversationEntry{
-		{Type: claude.EntryTypeUser, Content: []claude.ContentBlock{{Type: "text", Text: "New"}}},
-	}, nil)
-
-	if m.entrySelected != 0 {
-		t.Errorf("after SetData, entrySelected = %d, want 0", m.entrySelected)
+func TestConversationView_SeparatorSkippedWhenAllBlocksFiltered(t *testing.T) {
+	// Entry with only tool_use content
+	entries := []claude.ConversationEntry{
+		{Type: claude.EntryTypeAssistant, Content: []claude.ContentBlock{{Type: "tool_use", ToolName: "Read", ToolInput: `{}`}}},
 	}
-	if m.entryScroll != 0 {
-		t.Errorf("after SetData, entryScroll = %d, want 0", m.entryScroll)
-	}
-	if m.detailScroll != 0 {
-		t.Errorf("after SetData, detailScroll = %d, want 0", m.detailScroll)
-	}
-	if m.agentID != "new-agent" {
-		t.Errorf("after SetData, agentID = %q, want %q", m.agentID, "new-agent")
-	}
-}
-
-func TestConversationView_UpdateEntriesPreservesSelection(t *testing.T) {
-	entries := testEntries() // 5 entries
 	m := newTestConversationView(entries)
 
-	// Navigate to entry 3
-	m.entrySelected = 3
+	// Default: tool_use is off, so this entry's separator should also be hidden
+	view := m.View()
+	if strings.Contains(view, "[A]") {
+		t.Error("separator should be hidden when all blocks in entry are filtered out")
+	}
+}
 
-	// Update with same number of entries: selection preserved
-	m.UpdateEntries(entries, nil)
-	if m.entrySelected != 3 {
-		t.Errorf("after UpdateEntries with same count, entrySelected = %d, want 3", m.entrySelected)
+func TestConversationView_SeparatorShowsCorrectTag(t *testing.T) {
+	entries := []claude.ConversationEntry{
+		{Type: claude.EntryTypeUser, Content: []claude.ContentBlock{{Type: "text", Text: "User msg"}}},
+		{Type: claude.EntryTypeAssistant, Content: []claude.ContentBlock{{Type: "text", Text: "Assistant msg"}}},
+	}
+	m := newTestConversationView(entries)
+
+	view := m.View()
+	if !strings.Contains(view, "[U]") {
+		t.Error("user entry should have [U] separator tag")
+	}
+	if !strings.Contains(view, "[A]") {
+		t.Error("assistant entry should have [A] separator tag")
+	}
+}
+
+func TestRenderContentBlock(t *testing.T) {
+	tests := []struct {
+		name     string
+		block    claude.ContentBlock
+		contains []string
+	}{
+		{
+			name:     "text block",
+			block:    claude.ContentBlock{Type: "text", Text: "Hello world"},
+			contains: []string{"Hello world"},
+		},
+		{
+			name:     "tool_use block",
+			block:    claude.ContentBlock{Type: "tool_use", ToolName: "Read", ToolInput: `{"path":"/tmp"}`},
+			contains: []string{"[TOOL]", "Read", "path"},
+		},
+		{
+			name:     "tool_result block",
+			block:    claude.ContentBlock{Type: "tool_result", Text: "result data"},
+			contains: []string{"[TOOL_RESULT]", "result data"},
+		},
+		{
+			name:     "thinking block",
+			block:    claude.ContentBlock{Type: "thinking", Text: "deep thought"},
+			contains: []string{"[THINKING]", "deep thought"},
+		},
 	}
 
-	// Update with fewer entries (2): selection should be clamped to len-1
-	shortEntries := entries[:2]
-	m.UpdateEntries(shortEntries, nil)
-	if m.entrySelected != 1 {
-		t.Errorf("after UpdateEntries with 2 entries, entrySelected = %d, want 1 (clamped to len-1)", m.entrySelected)
-	}
-
-	// Update with 1 entry: selection should be clamped to 0
-	m.entrySelected = 1
-	singleEntry := entries[:1]
-	m.UpdateEntries(singleEntry, nil)
-	if m.entrySelected != 0 {
-		t.Errorf("after UpdateEntries with 1 entry, entrySelected = %d, want 0", m.entrySelected)
-	}
-
-	// Update with empty entries: selection stays at 0 (no crash)
-	m.UpdateEntries([]claude.ConversationEntry{}, nil)
-	// No assertion on entrySelected for empty - just verify no panic
-
-	// Update with more entries: selection preserved at current value
-	m.entrySelected = 0
-	m.UpdateEntries(entries, nil)
-	if m.entrySelected != 0 {
-		t.Errorf("after UpdateEntries with more entries, entrySelected = %d, want 0", m.entrySelected)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lines := renderContentBlock(tt.block, 80)
+			joined := strings.Join(lines, "\n")
+			for _, want := range tt.contains {
+				if !strings.Contains(joined, want) {
+					t.Errorf("renderContentBlock output should contain %q, got:\n%s", want, joined)
+				}
+			}
+		})
 	}
 }
