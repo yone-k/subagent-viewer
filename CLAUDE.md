@@ -15,7 +15,7 @@ go test -count=1 ./...            # Run all tests without cache
 
 ## Architecture
 
-Go TUI tool for monitoring Claude Code subagent tasks, debug logs, file changes, and session stats in real-time. Built with Bubble Tea (Elm architecture).
+Go TUI tool for monitoring Claude Code subagent tasks, agent conversations, debug logs, and session stats in real-time. Built with Bubble Tea (Elm architecture).
 
 ### Three-layer design (strict dependency direction: tui → watcher → claude)
 
@@ -24,9 +24,9 @@ Go TUI tool for monitoring Claude Code subagent tasks, debug logs, file changes,
 - **`internal/watcher/`** — Filesystem observation layer. Three watchers run as goroutines, dispatching `tea.Msg` via `program.Send()`:
   - `TaskWatcher`: fsnotify on `tasks/{UUID}/*.json`
   - `LogWatcher`: 500ms polling on `debug/{UUID}.txt` (polling avoids kqueue event flood on macOS)
-  - `FileWatcher`: fsnotify + 200ms debounce on `file-history/{UUID}/`
+  - `ConversationWatcher`: 1s polling on `projects/{encoded}/{UUID}/subagents/agent-*.jsonl` + incremental parent conversation parsing
 
-- **`internal/tui/`** — Bubble Tea presentation layer. `AppModel` is root, holds sub-models by value (standard Bubble Tea pattern). Two states: `StateSelector` (session picker) → `StateViewer` (4-tab viewer: Tasks/Logs/Files/Stats).
+- **`internal/tui/`** — Bubble Tea presentation layer. `AppModel` is root, holds sub-models by value (standard Bubble Tea pattern). Two states: `StateSelector` (session picker) → `StateViewer` (4-tab viewer: Tasks/Agents/Logs/Stats).
 
 ### Key patterns
 
@@ -42,7 +42,8 @@ Go TUI tool for monitoring Claude Code subagent tasks, debug logs, file changes,
 |------|--------|-------|
 | `tasks/{UUID}/*.json` | Individual JSON files | `.lock` = session active, `.highwatermark` = max task ID |
 | `debug/{UUID}.txt` | Timestamped lines: `ISO8601 [LEVEL] msg` | 7 levels: DEBUG/ERROR/WARN/MCP/STARTUP/META/ATTACHMENT. Continuation lines (no timestamp) merge into previous entry |
-| `file-history/{UUID}/` | `{16-hex-hash}@v{N}` | Same hash = same source file, versions are immutable (write-once) |
+| `projects/{encoded}/{UUID}/subagents/agent-*.jsonl` | JSONL per agent | "compact" agents are filtered out. Background agent completion detected via `queue-operation` lines |
+| `projects/{encoded}/{UUID}.jsonl` | Parent conversation JSONL | Used to enrich subagent descriptions |
 | `history.jsonl` | One JSON object per line | Some old entries lack `sessionId` — filter them out |
 | `.claude.json` | Global config JSON | `projects[path].last*` stats only for latest session per project |
 
