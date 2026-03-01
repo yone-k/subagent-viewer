@@ -22,6 +22,7 @@ const (
 type AgentViewModel struct {
 	agents           []claude.SubagentInfo
 	agentSelected    int
+	scrollOffset     int
 	mode             AgentViewMode
 	currentAgentID   string
 	conversations    map[string][]claude.ConversationEntry
@@ -46,6 +47,37 @@ func (m *AgentViewModel) SetSize(width, height int) {
 	m.conversationView.SetSize(width, height)
 }
 
+func (m AgentViewModel) viewHeight() int {
+	h := m.height - 2 // subtract header "サブエージェント一覧\n\n" (2 lines)
+	if h < 1 {
+		h = 1
+	}
+	return h
+}
+
+// clampScroll adjusts scrollOffset so the selected agent is always visible.
+func (m AgentViewModel) clampScroll() AgentViewModel {
+	viewHeight := m.viewHeight()
+	visibleItems := viewHeight / 3 // 1 agent = 3 lines (label + prompt + blank)
+	if visibleItems < 1 {
+		visibleItems = 1
+	}
+	if m.agentSelected < m.scrollOffset {
+		m.scrollOffset = m.agentSelected
+	}
+	if m.agentSelected >= m.scrollOffset+visibleItems {
+		m.scrollOffset = m.agentSelected - visibleItems + 1
+	}
+	maxOffset := max(0, len(m.agents)-visibleItems)
+	if m.scrollOffset > maxOffset {
+		m.scrollOffset = maxOffset
+	}
+	if m.scrollOffset < 0 {
+		m.scrollOffset = 0
+	}
+	return m
+}
+
 // Mode returns the current view mode.
 func (m AgentViewModel) Mode() AgentViewMode {
 	return m.mode
@@ -67,6 +99,7 @@ func (m AgentViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.agents) == 0 {
 			m.agentSelected = 0
 		}
+		m = m.clampScroll()
 
 	case watcher.ConversationUpdatedMsg:
 		m.conversations[msg.AgentID] = msg.Entries
@@ -113,6 +146,7 @@ func (m AgentViewModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.mode = AgentViewModeConversation
 			}
 		}
+		m = m.clampScroll()
 
 	case AgentViewModeConversation:
 		updated, handled := m.conversationView.Update(msg)
@@ -145,7 +179,10 @@ func (m AgentViewModel) viewAgents() string {
 	b.WriteString(TitleStyle.Render("サブエージェント一覧"))
 	b.WriteString("\n\n")
 
-	for i, agent := range m.agents {
+	viewHeight := m.viewHeight()
+	linesRendered := 0
+	for i := m.scrollOffset; i < len(m.agents) && linesRendered < viewHeight; i++ {
+		agent := m.agents[i]
 		label := agent.Description
 		if label == "" {
 			label = agent.Slug
@@ -154,7 +191,7 @@ func (m AgentViewModel) viewAgents() string {
 			label = agent.AgentID
 		}
 
-		// Status icon (kept separate from label to avoid ANSI nesting issues)
+		// Status icon
 		var statusPrefix string
 		switch agent.Status {
 		case claude.SubagentRunning:
@@ -179,13 +216,22 @@ func (m AgentViewModel) viewAgents() string {
 
 		selected := i == m.agentSelected
 		b.WriteString(renderListItemWithIcon(selected, statusPrefix, label, details...) + "\n")
+		linesRendered++
+		if linesRendered >= viewHeight {
+			break
+		}
 		if selected {
 			b.WriteString(fmt.Sprintf("    %s\n", SelectedDetailStyle.Render(prompt)))
 		} else {
 			b.WriteString(fmt.Sprintf("    %s\n", DimStyle.Render(prompt)))
 		}
+		linesRendered++
+		if linesRendered >= viewHeight {
+			break
+		}
 		if i < len(m.agents)-1 {
 			b.WriteString("\n")
+			linesRendered++
 		}
 	}
 

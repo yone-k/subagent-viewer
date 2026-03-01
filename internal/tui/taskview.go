@@ -15,11 +15,12 @@ const maxProgressBarWidth = 40
 
 // TaskViewModel manages the Tasks tab view.
 type TaskViewModel struct {
-	tasks      []claude.Task
-	selected   int
-	showDetail bool
-	width      int
-	height     int
+	tasks        []claude.Task
+	selected     int
+	showDetail   bool
+	scrollOffset int
+	width        int
+	height       int
 }
 
 // NewTaskViewModel creates a new TaskViewModel.
@@ -46,6 +47,7 @@ func (m TaskViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.selected >= len(m.tasks) {
 			m.selected = 0
 		}
+		m = m.clampScroll()
 	case watcher.TaskChangedMsg:
 		found := false
 		for i, task := range m.tasks {
@@ -66,6 +68,7 @@ func (m TaskViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return ni < nj
 			})
 		}
+		m = m.clampScroll()
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -85,7 +88,34 @@ func (m TaskViewModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		m.showDetail = !m.showDetail
 	}
+	m = m.clampScroll()
 	return m, nil
+}
+
+func (m TaskViewModel) viewHeight() int {
+	h := m.height - 2 // subtract progress bar (2 lines)
+	if h < 1 {
+		h = 1
+	}
+	return h
+}
+
+func (m TaskViewModel) clampScroll() TaskViewModel {
+	viewHeight := m.viewHeight()
+	if m.selected < m.scrollOffset {
+		m.scrollOffset = m.selected
+	}
+	if m.selected >= m.scrollOffset+viewHeight {
+		m.scrollOffset = m.selected - viewHeight + 1
+	}
+	maxOffset := max(0, len(m.tasks)-viewHeight)
+	if m.scrollOffset > maxOffset {
+		m.scrollOffset = maxOffset
+	}
+	if m.scrollOffset < 0 {
+		m.scrollOffset = 0
+	}
+	return m
 }
 
 // View renders the task list.
@@ -111,8 +141,11 @@ func (m TaskViewModel) viewTasks() string {
 	b.WriteString(renderProgressBar(completed, total, m.width-4))
 	b.WriteString(fmt.Sprintf("  %d/%d\n\n", completed, total))
 
-	// Task list
-	for i, task := range m.tasks {
+	// Task list with scroll
+	viewHeight := m.viewHeight()
+	linesRendered := 0
+	for i := m.scrollOffset; i < len(m.tasks) && linesRendered < viewHeight; i++ {
+		task := m.tasks[i]
 		icon := statusIcon(task)
 
 		// Build detail parts
@@ -130,11 +163,13 @@ func (m TaskViewModel) viewTasks() string {
 
 		iconPrefix := icon + " "
 		b.WriteString(renderListItemWithIcon(i == m.selected, iconPrefix, task.Subject, details...) + "\n")
+		linesRendered++
 
 		// Show detail for selected task
 		if i == m.selected && m.showDetail && task.Description != "" {
 			b.WriteString(BorderStyle.Render(task.Description))
 			b.WriteString("\n")
+			linesRendered++
 		}
 	}
 

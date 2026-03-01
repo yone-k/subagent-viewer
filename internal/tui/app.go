@@ -102,19 +102,14 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.state == StateSelector {
 			m.selector.SetSize(msg.Width, msg.Height)
 		}
-		contentHeight := msg.Height - headerAndTabsHeight
-		m.taskView.SetSize(msg.Width, contentHeight)
-		m.agentView.SetSize(msg.Width, contentHeight)
-		m.logView.SetSize(msg.Width, contentHeight)
-		m.fileView.SetSize(msg.Width, contentHeight)
-		m.statsView.SetSize(msg.Width, contentHeight)
+		m.recomputeContentSize()
 		return m, nil
 
 	case SessionSelectedMsg:
 		m.state = StateViewer
 		m.session = msg.Session
 		m.statsView = NewStatsViewModel(msg.Session.SessionID)
-		m.statsView.SetSize(m.width, m.height-headerAndTabsHeight)
+		m.recomputeContentSize()
 		// Check if session is active
 		lockPath := filepath.Join(claude.TasksDir(msg.Session.SessionID), ".lock")
 		if _, err := os.Stat(lockPath); err == nil {
@@ -178,6 +173,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case watcher.WatcherErrorMsg:
 		m.lastError = fmt.Sprintf("%s: %v", msg.Source, msg.Err)
+		m.recomputeContentSize()
 		return m, nil
 
 	case tea.KeyMsg:
@@ -219,24 +215,31 @@ func (m *AppModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, GlobalKeys.Tab1):
 		m.tabs.SetActive(0)
+		m.recomputeContentSize()
 		return m, nil
 	case key.Matches(msg, GlobalKeys.Tab2):
 		m.tabs.SetActive(1)
+		m.recomputeContentSize()
 		return m, nil
 	case key.Matches(msg, GlobalKeys.Tab3):
 		m.tabs.SetActive(2)
+		m.recomputeContentSize()
 		return m, nil
 	case key.Matches(msg, GlobalKeys.Tab4):
 		m.tabs.SetActive(3)
+		m.recomputeContentSize()
 		return m, nil
 	case key.Matches(msg, GlobalKeys.Tab5):
 		m.tabs.SetActive(4)
+		m.recomputeContentSize()
 		return m, nil
 	case key.Matches(msg, GlobalKeys.NextTab):
 		m.tabs.NextTab()
+		m.recomputeContentSize()
 		return m, nil
 	case key.Matches(msg, GlobalKeys.PrevTab):
 		m.tabs.PrevTab()
+		m.recomputeContentSize()
 		return m, nil
 	}
 
@@ -264,6 +267,7 @@ func (m *AppModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.statsView = newModel.(StatsViewModel)
 		cmd = c
 	}
+	m.recomputeContentSize()
 
 	return m, cmd
 }
@@ -335,6 +339,25 @@ func (m *AppModel) footerHelp() string {
 
 	session := fmt.Sprintf("Session: %s", m.session.SessionID)
 	return wordWrap(keys, m.width) + "\n" + session
+}
+
+func (m *AppModel) footerHeight() int {
+	footerText := m.footerHelp()
+	lines := strings.Count(footerText, "\n") + 1
+	lines += 1 // separator line
+	if m.lastError != "" {
+		lines += 1
+	}
+	return lines
+}
+
+func (m *AppModel) recomputeContentSize() {
+	contentHeight := max(m.height-headerAndTabsHeight-m.footerHeight(), 1)
+	m.taskView.SetSize(m.width, contentHeight)
+	m.agentView.SetSize(m.width, contentHeight)
+	m.logView.SetSize(m.width, contentHeight)
+	m.fileView.SetSize(m.width, contentHeight)
+	m.statsView.SetSize(m.width, contentHeight)
 }
 
 func (m *AppModel) startWatchersCmd() tea.Cmd {

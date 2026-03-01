@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -149,5 +150,72 @@ func TestAgentView_ConversationUpdatedMsg(t *testing.T) {
 	got := m.View()
 	if !strings.Contains(got, "Hello") {
 		t.Errorf("expected conversation view to contain 'Hello', got:\n%s", got)
+	}
+}
+
+func TestAgentView_ScrollFollowsSelection(t *testing.T) {
+	m := NewAgentViewModel()
+	m.SetSize(80, 11) // height=11: viewHeight = 11-2 = 9, visibleItems = 9/3 = 3
+
+	// Create 10 agents
+	agents := make([]claude.SubagentInfo, 10)
+	for i := range agents {
+		agents[i] = claude.SubagentInfo{
+			AgentID: fmt.Sprintf("agent-%d", i+1),
+			Slug:    fmt.Sprintf("agent-%d", i+1),
+			Prompt:  fmt.Sprintf("Prompt for agent %d", i+1),
+		}
+	}
+	updated, _ := m.Update(watcher.SubagentsDiscoveredMsg{Agents: agents})
+	m = updated.(AgentViewModel)
+
+	if m.scrollOffset != 0 {
+		t.Errorf("initial scrollOffset = %d, want 0", m.scrollOffset)
+	}
+
+	// Move down to item 3 (index 2) — still visible
+	for i := 0; i < 2; i++ {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+		m = updated.(AgentViewModel)
+	}
+	if m.agentSelected != 2 {
+		t.Errorf("agentSelected = %d, want 2", m.agentSelected)
+	}
+	if m.scrollOffset != 0 {
+		t.Errorf("scrollOffset = %d, want 0", m.scrollOffset)
+	}
+
+	// Move down to item 4 (index 3) — should start scrolling
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	m = updated.(AgentViewModel)
+	if m.agentSelected != 3 {
+		t.Errorf("agentSelected = %d, want 3", m.agentSelected)
+	}
+	if m.scrollOffset != 1 {
+		t.Errorf("scrollOffset = %d, want 1", m.scrollOffset)
+	}
+
+	// Move to last item (index 9)
+	for i := 0; i < 6; i++ {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+		m = updated.(AgentViewModel)
+	}
+	if m.agentSelected != 9 {
+		t.Errorf("agentSelected = %d, want 9", m.agentSelected)
+	}
+	if m.scrollOffset != 7 {
+		t.Errorf("scrollOffset = %d, want 7", m.scrollOffset)
+	}
+
+	// Move all the way back up
+	for i := 0; i < 9; i++ {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+		m = updated.(AgentViewModel)
+	}
+	if m.agentSelected != 0 {
+		t.Errorf("agentSelected = %d, want 0", m.agentSelected)
+	}
+	if m.scrollOffset != 0 {
+		t.Errorf("scrollOffset = %d, want 0", m.scrollOffset)
 	}
 }

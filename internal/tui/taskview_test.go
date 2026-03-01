@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -262,5 +263,79 @@ func TestTaskView_EnterToggle(t *testing.T) {
 	m = newModel.(TaskViewModel)
 	if m.showDetail {
 		t.Error("showDetail should be false after second Enter")
+	}
+}
+
+func TestTaskView_ScrollFollowsSelection(t *testing.T) {
+	m := NewTaskViewModel()
+	m.SetSize(80, 7) // height=7: viewHeight = 7-2 = 5 items visible
+
+	// Create 10 tasks
+	tasks := make([]claude.Task, 10)
+	for i := range tasks {
+		tasks[i] = claude.Task{
+			ID:      fmt.Sprintf("%d", i+1),
+			Subject: fmt.Sprintf("Task %d", i+1),
+			Status:  "pending",
+		}
+	}
+	newModel, _ := m.Update(watcher.TasksUpdatedMsg{Tasks: tasks})
+	m = newModel.(TaskViewModel)
+
+	if m.scrollOffset != 0 {
+		t.Errorf("initial scrollOffset = %d, want 0", m.scrollOffset)
+	}
+
+	// Move down to item 5 (index 4) — should still be visible without scrolling
+	for i := 0; i < 4; i++ {
+		newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+		m = newModel.(TaskViewModel)
+	}
+	if m.selected != 4 {
+		t.Errorf("selected = %d, want 4", m.selected)
+	}
+	if m.scrollOffset != 0 {
+		t.Errorf("scrollOffset = %d, want 0 (item 4 fits in viewHeight 5)", m.scrollOffset)
+	}
+
+	// Move down to item 6 (index 5) — should start scrolling
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	m = newModel.(TaskViewModel)
+	if m.selected != 5 {
+		t.Errorf("selected = %d, want 5", m.selected)
+	}
+	if m.scrollOffset != 1 {
+		t.Errorf("scrollOffset = %d, want 1", m.scrollOffset)
+	}
+
+	// Move to last item (index 9)
+	for i := 0; i < 4; i++ {
+		newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+		m = newModel.(TaskViewModel)
+	}
+	if m.selected != 9 {
+		t.Errorf("selected = %d, want 9", m.selected)
+	}
+	if m.scrollOffset != 5 {
+		t.Errorf("scrollOffset = %d, want 5", m.scrollOffset)
+	}
+
+	// Move back up — scroll should follow
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	m = newModel.(TaskViewModel)
+	if m.selected != 8 {
+		t.Errorf("selected = %d, want 8", m.selected)
+	}
+
+	// Move all the way up
+	for i := 0; i < 8; i++ {
+		newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+		m = newModel.(TaskViewModel)
+	}
+	if m.selected != 0 {
+		t.Errorf("selected = %d, want 0", m.selected)
+	}
+	if m.scrollOffset != 0 {
+		t.Errorf("scrollOffset = %d, want 0", m.scrollOffset)
 	}
 }

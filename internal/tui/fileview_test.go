@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -125,5 +126,80 @@ func TestFileView_SelectedClampOnGroupsReduced(t *testing.T) {
 	}
 	if m.selected != 0 {
 		t.Errorf("selected = %d, want 0", m.selected)
+	}
+}
+
+func TestFileView_ScrollFollowsSelection(t *testing.T) {
+	m := NewFileViewModel()
+	m.SetSize(80, 5) // height=5: viewHeight = 5
+
+	// Create 10 groups, each with 2 versions
+	groups := make([]claude.FileGroup, 10)
+	for i := range groups {
+		hash := fmt.Sprintf("hash%04d", i)
+		groups[i] = claude.FileGroup{
+			Hash: hash,
+			Versions: []claude.FileVersion{
+				{Hash: hash, Version: 1, Path: fmt.Sprintf("/tmp/%s@v1", hash), Size: 100},
+				{Hash: hash, Version: 2, Path: fmt.Sprintf("/tmp/%s@v2", hash), Size: 200},
+			},
+		}
+	}
+	newModel, _ := m.Update(watcher.FileHistoryUpdatedMsg{Groups: groups})
+	m = newModel.(FileViewModel)
+
+	if m.scrollOffset != 0 {
+		t.Errorf("initial scrollOffset = %d, want 0", m.scrollOffset)
+	}
+
+	// Move down 4 times to item index 4 — items 0-4 fill 5 lines (1 each collapsed)
+	for i := 0; i < 4; i++ {
+		newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+		m = newModel.(FileViewModel)
+	}
+	if m.selected != 4 {
+		t.Errorf("selected = %d, want 4", m.selected)
+	}
+	if m.scrollOffset != 0 {
+		t.Errorf("scrollOffset = %d, want 0 (all collapsed, 5 fit in viewHeight 5)", m.scrollOffset)
+	}
+
+	// Move down to index 5 — should scroll
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	m = newModel.(FileViewModel)
+	if m.selected != 5 {
+		t.Errorf("selected = %d, want 5", m.selected)
+	}
+	if m.scrollOffset != 1 {
+		t.Errorf("scrollOffset = %d, want 1", m.scrollOffset)
+	}
+
+	// Now expand group 5 (selected) — it becomes 3 lines (1 header + 2 versions)
+	// viewHeight = 5, so scrollOffset must adjust
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(FileViewModel)
+	if !m.expanded[groups[5].Hash] {
+		t.Error("group 5 should be expanded")
+	}
+	// After expansion: group 5 = 3 lines, groups 1-4 = 1 line each
+	// scrollOffset needs to ensure group 5 (3 lines) fits in viewHeight (5)
+	// groups from scrollOffset to 5 must fit in 5 lines
+	// If scrollOffset=1: groups 1,2,3,4 (4 lines) + group 5 (3 lines) = 7 > 5, so need to scroll more
+	// scrollOffset should adjust so that accumulated lines from scrollOffset to 5 <= 5
+	// scrollOffset=3: groups 3,4 (2 lines) + group 5 (3 lines) = 5 <= 5 ✓
+	if m.scrollOffset < 1 {
+		t.Errorf("scrollOffset = %d, should be >= 1 after expansion", m.scrollOffset)
+	}
+
+	// Move back up — scroll should follow
+	for i := 0; i < 5; i++ {
+		newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+		m = newModel.(FileViewModel)
+	}
+	if m.selected != 0 {
+		t.Errorf("selected = %d, want 0", m.selected)
+	}
+	if m.scrollOffset != 0 {
+		t.Errorf("scrollOffset = %d, want 0 after moving to top", m.scrollOffset)
 	}
 }
