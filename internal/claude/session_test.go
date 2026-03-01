@@ -267,3 +267,67 @@ func TestDiscoverSessions_EmptyHistory(t *testing.T) {
 		t.Errorf("DiscoverSessions() returned %d sessions, want 0", len(sessions))
 	}
 }
+
+func TestBuildSessionInfo(t *testing.T) {
+	base := setupTestBase(t)
+	configPath := filepath.Join(base, "claude.json")
+
+	t.Run("session with matching project sets Project field", func(t *testing.T) {
+		// session-1 is lastSessionId for /test/project-a in the test fixture
+		info := BuildSessionInfo(base, configPath, "session-1")
+		if info.SessionID != "session-1" {
+			t.Errorf("SessionID = %q, want %q", info.SessionID, "session-1")
+		}
+		if info.Project != "/test/project-a" {
+			t.Errorf("Project = %q, want %q", info.Project, "/test/project-a")
+		}
+		if info.Stats == nil {
+			t.Error("Stats should not be nil for session-1 (project-a has stats)")
+		}
+		if !info.HasTasks {
+			t.Error("HasTasks should be true for session-1")
+		}
+		if !info.HasDebugLog {
+			t.Error("HasDebugLog should be true for session-1")
+		}
+		if !info.HasFileHistory {
+			t.Error("HasFileHistory should be true for session-1")
+		}
+	})
+
+	t.Run("session without matching project leaves Project empty", func(t *testing.T) {
+		// session-2 is not a lastSessionId for any project in the test fixture
+		info := BuildSessionInfo(base, configPath, "session-2")
+		if info.SessionID != "session-2" {
+			t.Errorf("SessionID = %q, want %q", info.SessionID, "session-2")
+		}
+		if info.Project != "" {
+			t.Errorf("Project = %q, want empty string", info.Project)
+		}
+		if info.Stats != nil {
+			t.Error("Stats should be nil for session-2 (not a lastSessionId)")
+		}
+		if info.HasTasks {
+			t.Error("HasTasks should be false for session-2")
+		}
+		if info.HasDebugLog {
+			t.Error("HasDebugLog should be false for session-2")
+		}
+		if info.HasFileHistory {
+			t.Error("HasFileHistory should be false for session-2")
+		}
+	})
+
+	t.Run("unknown session has all fields empty/false", func(t *testing.T) {
+		info := BuildSessionInfo(base, configPath, "nonexistent")
+		if info.Project != "" {
+			t.Errorf("Project = %q, want empty string", info.Project)
+		}
+		if info.Stats != nil {
+			t.Error("Stats should be nil for nonexistent session")
+		}
+		if info.HasTasks || info.HasDebugLog || info.HasFileHistory {
+			t.Error("capabilities should all be false for nonexistent session")
+		}
+	})
+}

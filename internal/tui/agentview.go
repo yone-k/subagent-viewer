@@ -154,6 +154,15 @@ func (m AgentViewModel) viewAgents() string {
 			label = agent.AgentID
 		}
 
+		// Status icon (kept separate from label to avoid ANSI nesting issues)
+		var statusPrefix string
+		switch agent.Status {
+		case claude.SubagentRunning:
+			statusPrefix = StatusInProgress.String() + " "
+		case claude.SubagentClosed:
+			statusPrefix = StatusCompleted.String() + " "
+		}
+
 		// 4 = indent for prompt line ("    ")
 		maxPromptWidth := m.width - 4
 		if maxPromptWidth < 10 {
@@ -169,7 +178,7 @@ func (m AgentViewModel) viewAgents() string {
 		details = append(details, fmt.Sprintf("  (%d entries)", agent.EntryCount))
 
 		selected := i == m.agentSelected
-		b.WriteString(renderListItem(selected, label, details...) + "\n")
+		b.WriteString(renderListItemWithIcon(selected, statusPrefix, label, details...) + "\n")
 		if selected {
 			b.WriteString(fmt.Sprintf("    %s\n", SelectedDetailStyle.Render(prompt)))
 		} else {

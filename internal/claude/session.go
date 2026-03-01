@@ -141,7 +141,7 @@ func HasDirFiles(dir string) bool {
 
 // BuildSessionInfo constructs a SessionInfo for a single session without
 // scanning history.jsonl. It detects capabilities from the filesystem
-// and attaches project stats from configPath (project is left empty).
+// and attaches project path and stats from configPath.
 func BuildSessionInfo(basePath, configPath, sessionID string) SessionInfo {
 	info := SessionInfo{
 		SessionID:      sessionID,
@@ -152,8 +152,9 @@ func BuildSessionInfo(basePath, configPath, sessionID string) SessionInfo {
 
 	// Try to load stats from config (project unknown, so iterate to find matching session)
 	if projects, err := loadGlobalConfig(configPath); err == nil {
-		for _, stats := range projects {
+		for projectPath, stats := range projects {
 			if stats.LastSessionID == sessionID {
+				info.Project = projectPath
 				info.Stats = stats
 				break
 			}

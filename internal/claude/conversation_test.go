@@ -118,34 +118,50 @@ func TestExtractAgentDescriptions(t *testing.T) {
 		t.Fatalf("ExtractAgentDescriptions() error = %v", err)
 	}
 
-	if len(descriptions) != 2 {
-		t.Fatalf("got %d descriptions, want 2", len(descriptions))
+	if len(descriptions) != 3 {
+		t.Fatalf("got %d descriptions, want 3", len(descriptions))
 	}
 
-	// First Agent tool_use: prompt is within 200 chars, used as-is for key
-	key1 := "Analyze the project structure and list all directories and key files. Focus on understanding the architecture."
-	if desc, ok := descriptions[key1]; !ok {
-		t.Errorf("key %q not found in descriptions", key1)
-	} else {
-		if desc.Description != "Explore current repo structure" {
-			t.Errorf("descriptions[key1].Description = %q, want %q", desc.Description, "Explore current repo structure")
-		}
-		if desc.SubagentType != "Explore" {
-			t.Errorf("descriptions[key1].SubagentType = %q, want %q", desc.SubagentType, "Explore")
-		}
+	// First Agent tool_use: closed (has tool_result)
+	if descriptions[0].Description != "Explore current repo structure" {
+		t.Errorf("descriptions[0].Description = %q, want %q", descriptions[0].Description, "Explore current repo structure")
+	}
+	if descriptions[0].SubagentType != "Explore" {
+		t.Errorf("descriptions[0].SubagentType = %q, want %q", descriptions[0].SubagentType, "Explore")
+	}
+	if descriptions[0].ToolUseID != "tool1" {
+		t.Errorf("descriptions[0].ToolUseID = %q, want %q", descriptions[0].ToolUseID, "tool1")
+	}
+	if descriptions[0].Status != SubagentClosed {
+		t.Errorf("descriptions[0].Status = %q, want %q", descriptions[0].Status, SubagentClosed)
 	}
 
-	// Second Agent tool_use
-	key2 := "Add user authentication using JWT tokens. Create the auth middleware and login endpoint."
-	if desc, ok := descriptions[key2]; !ok {
-		t.Errorf("key %q not found in descriptions", key2)
-	} else {
-		if desc.Description != "Implement user auth" {
-			t.Errorf("descriptions[key2].Description = %q, want %q", desc.Description, "Implement user auth")
-		}
-		if desc.SubagentType != "general-task-executor" {
-			t.Errorf("descriptions[key2].SubagentType = %q, want %q", desc.SubagentType, "general-task-executor")
-		}
+	// Second Agent tool_use: closed (has tool_result)
+	if descriptions[1].Description != "Implement user auth" {
+		t.Errorf("descriptions[1].Description = %q, want %q", descriptions[1].Description, "Implement user auth")
+	}
+	if descriptions[1].SubagentType != "general-task-executor" {
+		t.Errorf("descriptions[1].SubagentType = %q, want %q", descriptions[1].SubagentType, "general-task-executor")
+	}
+	if descriptions[1].ToolUseID != "tool2" {
+		t.Errorf("descriptions[1].ToolUseID = %q, want %q", descriptions[1].ToolUseID, "tool2")
+	}
+	if descriptions[1].Status != SubagentClosed {
+		t.Errorf("descriptions[1].Status = %q, want %q", descriptions[1].Status, SubagentClosed)
+	}
+
+	// Third Agent tool_use: running (no tool_result)
+	if descriptions[2].Description != "Refactor database layer" {
+		t.Errorf("descriptions[2].Description = %q, want %q", descriptions[2].Description, "Refactor database layer")
+	}
+	if descriptions[2].SubagentType != "general-task-executor" {
+		t.Errorf("descriptions[2].SubagentType = %q, want %q", descriptions[2].SubagentType, "general-task-executor")
+	}
+	if descriptions[2].ToolUseID != "toolu_running_test" {
+		t.Errorf("descriptions[2].ToolUseID = %q, want %q", descriptions[2].ToolUseID, "toolu_running_test")
+	}
+	if descriptions[2].Status != SubagentRunning {
+		t.Errorf("descriptions[2].Status = %q, want %q", descriptions[2].Status, SubagentRunning)
 	}
 }
 
@@ -157,32 +173,38 @@ func TestExtractAgentDescriptions_FileNotFound(t *testing.T) {
 }
 
 func TestEnrichSubagentsWithDescriptions(t *testing.T) {
-	// Simulate descriptions extracted from parent conversation (key = full prompt)
-	descriptions := map[string]AgentDescription{
-		"Analyze the project structure and list all directories and key files. Focus on understanding the architecture.": {Description: "Explore current repo structure", SubagentType: "Explore"},
-		"Add user authentication using JWT tokens. Create the auth middleware and login endpoint.":                       {Description: "Implement user auth", SubagentType: "general-task-executor"},
+	// Simulate descriptions extracted from parent conversation
+	descriptions := []AgentDescription{
+		{Prompt: "Analyze the project structure and list all directories and key files. Focus on understanding the architecture.", Description: "Explore current repo structure", SubagentType: "Explore", ToolUseID: "tool1", Status: SubagentClosed},
+		{Prompt: "Add user authentication using JWT tokens. Create the auth middleware and login endpoint.", Description: "Implement user auth", SubagentType: "general-task-executor", ToolUseID: "tool2", Status: SubagentClosed},
 	}
 
+	baseTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	agents := []SubagentInfo{
 		{
-			AgentID: "agent1",
-			// Prompt is the full prompt (within 120 chars)
-			Prompt: truncateString("Analyze the project structure and list all directories and key files. Focus on understanding the architecture.", 120),
+			AgentID:   "agent1",
+			Prompt:    truncateString("Analyze the project structure and list all directories and key files. Focus on understanding the architecture.", 120),
+			CreatedAt: baseTime,
 		},
 		{
-			AgentID: "agent2",
-			// Prompt truncated to 120 chars by ParseConversationFile
-			Prompt: truncateString("Add user authentication using JWT tokens. Create the auth middleware and login endpoint.", 120),
+			AgentID:   "agent2",
+			Prompt:    truncateString("Add user authentication using JWT tokens. Create the auth middleware and login endpoint.", 120),
+			CreatedAt: baseTime.Add(1 * time.Hour),
 		},
 	}
 
 	EnrichSubagentsWithDescriptions(agents, descriptions)
 
+	// After enrichment, agents remain in CreatedAt ascending order (caller sorts for display)
+	// agents[0] = agent1 (older), agents[1] = agent2 (newer)
 	if agents[0].Description != "Explore current repo structure" {
 		t.Errorf("agents[0].Description = %q, want %q", agents[0].Description, "Explore current repo structure")
 	}
 	if agents[0].SubagentType != "Explore" {
 		t.Errorf("agents[0].SubagentType = %q, want %q", agents[0].SubagentType, "Explore")
+	}
+	if agents[0].Status != SubagentClosed {
+		t.Errorf("agents[0].Status = %q, want %q", agents[0].Status, SubagentClosed)
 	}
 	if agents[1].Description != "Implement user auth" {
 		t.Errorf("agents[1].Description = %q, want %q", agents[1].Description, "Implement user auth")
@@ -190,14 +212,17 @@ func TestEnrichSubagentsWithDescriptions(t *testing.T) {
 	if agents[1].SubagentType != "general-task-executor" {
 		t.Errorf("agents[1].SubagentType = %q, want %q", agents[1].SubagentType, "general-task-executor")
 	}
+	if agents[1].Status != SubagentClosed {
+		t.Errorf("agents[1].Status = %q, want %q", agents[1].Status, SubagentClosed)
+	}
 }
 
 func TestEnrichSubagentsWithDescriptions_ExactMatchPriority(t *testing.T) {
-	// When the prompt matches a key exactly, it should be used even if
-	// another key also has the same prefix.
-	descriptions := map[string]AgentDescription{
-		"Fix the bug":                          {Description: "exact match", SubagentType: "exact"},
-		"Fix the bug in the authentication module": {Description: "prefix match", SubagentType: "prefix"},
+	// When the prompt matches exactly, it should be used even if
+	// another description also has the same prefix.
+	descriptions := []AgentDescription{
+		{Prompt: "Fix the bug in the authentication module", Description: "prefix match", SubagentType: "prefix", Status: SubagentClosed},
+		{Prompt: "Fix the bug", Description: "exact match", SubagentType: "exact", Status: SubagentRunning},
 	}
 
 	agents := []SubagentInfo{
@@ -215,13 +240,16 @@ func TestEnrichSubagentsWithDescriptions_ExactMatchPriority(t *testing.T) {
 	if agents[0].SubagentType != "exact" {
 		t.Errorf("agents[0].SubagentType = %q, want %q", agents[0].SubagentType, "exact")
 	}
+	if agents[0].Status != SubagentRunning {
+		t.Errorf("agents[0].Status = %q, want %q", agents[0].Status, SubagentRunning)
+	}
 }
 
 func TestEnrichSubagentsWithDescriptions_PrefixFallback(t *testing.T) {
 	// When no exact match exists, prefix match should be used as fallback.
 	longPrompt := "This is a very long prompt that exceeds one hundred and twenty characters so it will be truncated by ParseConversationEntries to test prefix matching behavior"
-	descriptions := map[string]AgentDescription{
-		longPrompt: {Description: "found via prefix", SubagentType: "prefix-type"},
+	descriptions := []AgentDescription{
+		{Prompt: longPrompt, Description: "found via prefix", SubagentType: "prefix-type", Status: SubagentClosed},
 	}
 
 	agents := []SubagentInfo{
@@ -239,8 +267,8 @@ func TestEnrichSubagentsWithDescriptions_PrefixFallback(t *testing.T) {
 }
 
 func TestEnrichSubagentsWithDescriptions_NoMatch(t *testing.T) {
-	descriptions := map[string]AgentDescription{
-		"Some prompt that does not match": {Description: "Some description", SubagentType: "Explore"},
+	descriptions := []AgentDescription{
+		{Prompt: "Some prompt that does not match", Description: "Some description", SubagentType: "Explore", Status: SubagentClosed},
 	}
 
 	agents := []SubagentInfo{
@@ -254,6 +282,47 @@ func TestEnrichSubagentsWithDescriptions_NoMatch(t *testing.T) {
 
 	if agents[0].Description != "" {
 		t.Errorf("agents[0].Description = %q, want empty string", agents[0].Description)
+	}
+}
+
+func TestEnrichSubagentsWithDescriptions_DuplicatePrompt(t *testing.T) {
+	// Two descriptions with the same prompt but different statuses
+	descriptions := []AgentDescription{
+		{Prompt: "Run the test suite", Description: "First test run", SubagentType: "general-task-executor", ToolUseID: "tool_a", Status: SubagentClosed},
+		{Prompt: "Run the test suite", Description: "Second test run", SubagentType: "general-task-executor", ToolUseID: "tool_b", Status: SubagentRunning},
+	}
+
+	baseTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	agents := []SubagentInfo{
+		{
+			AgentID:   "agent1",
+			Prompt:    "Run the test suite",
+			CreatedAt: baseTime,
+		},
+		{
+			AgentID:   "agent2",
+			Prompt:    "Run the test suite",
+			CreatedAt: baseTime.Add(1 * time.Hour),
+		},
+	}
+
+	EnrichSubagentsWithDescriptions(agents, descriptions)
+
+	// After enrichment, agents remain in CreatedAt ascending order (caller sorts for display)
+	// agents[0] = agent1 (older, matched first description = Closed)
+	// agents[1] = agent2 (newer, matched second description = Running)
+	if agents[0].Description != "First test run" {
+		t.Errorf("agents[0].Description = %q, want %q", agents[0].Description, "First test run")
+	}
+	if agents[0].Status != SubagentClosed {
+		t.Errorf("agents[0].Status = %q, want %q", agents[0].Status, SubagentClosed)
+	}
+
+	if agents[1].Description != "Second test run" {
+		t.Errorf("agents[1].Description = %q, want %q", agents[1].Description, "Second test run")
+	}
+	if agents[1].Status != SubagentRunning {
+		t.Errorf("agents[1].Status = %q, want %q", agents[1].Status, SubagentRunning)
 	}
 }
 

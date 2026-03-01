@@ -128,8 +128,8 @@ func (m TaskViewModel) viewTasks() string {
 			details = append(details, fmt.Sprintf(" — %s", task.ActiveForm))
 		}
 
-		label := fmt.Sprintf("%s %s", icon, task.Subject)
-		b.WriteString(renderListItem(i == m.selected, label, details...) + "\n")
+		iconPrefix := icon + " "
+		b.WriteString(renderListItemWithIcon(i == m.selected, iconPrefix, task.Subject, details...) + "\n")
 
 		// Show detail for selected task
 		if i == m.selected && m.showDetail && task.Description != "" {

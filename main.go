@@ -77,7 +77,11 @@ func main() {
 			os.Exit(1)
 		}
 
-		model := tui.NewAppModel(sessions)
+		cwd, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "警告: カレントディレクトリの取得に失敗しました: %v\nプロジェクトフィルタは無効になります。\n", err)
+		}
+		model := tui.NewAppModel(sessions, cwd)
 		if err := runProgram(&model, tea.WithAltScreen()); err != nil {
 			fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
 			os.Exit(1)

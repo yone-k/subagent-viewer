@@ -17,7 +17,8 @@ var (
 	colorDanger  = lipgloss.Color("1")  // Red
 	colorCyan    = lipgloss.Color("6")  // Cyan
 	colorMagenta = lipgloss.Color("5")  // Magenta
-	colorBlue    = lipgloss.Color("4")  // Blue
+	colorBlue        = lipgloss.Color("4")  // Blue
+	colorBrightWhite = lipgloss.Color("15") // Bright White - high-contrast text on colored backgrounds
 )
 
 // Tab styles
@@ -114,11 +115,14 @@ var (
 
 	FilterActiveStyle = lipgloss.NewStyle().
 		Bold(true).
-		Foreground(colorSuccess)
+		Foreground(colorBrightWhite).
+		Background(colorBlue).
+		Padding(0, 1)
 
 	FilterInactiveStyle = lipgloss.NewStyle().
 		Foreground(colorMuted).
-		Faint(true)
+		Faint(true).
+		Padding(0, 1)
 
 	ProgressBarFilled = lipgloss.NewStyle().
 		Foreground(colorSuccess)
@@ -155,6 +159,13 @@ var (
 // The prefix is "> " for selected items and "  " for unselected items.
 // details are appended after the label in the appropriate style.
 func renderListItem(selected bool, label string, details ...string) string {
+	return renderListItemWithIcon(selected, "", label, details...)
+}
+
+// renderListItemWithIcon renders a list item with an optional icon prefix.
+// The icon is placed between the cursor prefix ("> " / "  ") and the label,
+// outside SelectedLabelStyle to avoid ANSI escape sequence conflicts.
+func renderListItemWithIcon(selected bool, icon string, label string, details ...string) string {
 	prefix := "  "
 	if selected {
 		prefix = "> "
@@ -162,12 +173,12 @@ func renderListItem(selected bool, label string, details ...string) string {
 
 	var line string
 	if selected {
-		line = prefix + SelectedLabelStyle.Render(label)
+		line = prefix + icon + SelectedLabelStyle.Render(label)
 		for _, d := range details {
 			line += SelectedDetailStyle.Render(d)
 		}
 	} else {
-		line = prefix + label
+		line = prefix + icon + label
 		for _, d := range details {
 			line += DimStyle.Render(d)
 		}

@@ -11,7 +11,7 @@ import (
 )
 
 func TestAppModel_InitialState(t *testing.T) {
-	m := NewAppModel(nil)
+	m := NewAppModel(nil, "")
 	if m.state != StateSelector {
 		t.Errorf("initial state = %d, want StateSelector (%d)", m.state, StateSelector)
 	}
@@ -21,7 +21,7 @@ func TestAppModel_SessionSelected(t *testing.T) {
 	sessions := []claude.SessionInfo{
 		{SessionID: "test-session", Project: "/test", HasTasks: true, HasDebugLog: true},
 	}
-	m := NewAppModel(sessions)
+	m := NewAppModel(sessions, "")
 	m.width = 80
 	m.height = 24
 
@@ -40,7 +40,7 @@ func TestAppModel_SessionSelected(t *testing.T) {
 }
 
 func TestAppModel_TabSwitch(t *testing.T) {
-	m := NewAppModel(nil)
+	m := NewAppModel(nil, "")
 	m.state = StateViewer
 	m.width = 80
 	m.height = 24
@@ -75,7 +75,7 @@ func TestAppModel_TabSwitch(t *testing.T) {
 }
 
 func TestAppModel_TabCycle(t *testing.T) {
-	m := NewAppModel(nil)
+	m := NewAppModel(nil, "")
 	m.state = StateViewer
 	m.width = 80
 	m.height = 24
@@ -96,7 +96,7 @@ func TestAppModel_TabCycle(t *testing.T) {
 }
 
 func TestAppModel_WindowResize(t *testing.T) {
-	m := NewAppModel(nil)
+	m := NewAppModel(nil, "")
 	m.state = StateViewer
 
 	newModel, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
@@ -111,7 +111,7 @@ func TestAppModel_WindowResize(t *testing.T) {
 }
 
 func TestAppModel_Quit(t *testing.T) {
-	m := NewAppModel(nil)
+	m := NewAppModel(nil, "")
 	m.state = StateViewer
 
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
@@ -121,7 +121,7 @@ func TestAppModel_Quit(t *testing.T) {
 }
 
 func TestAppModel_ActiveSessionIndicator(t *testing.T) {
-	m := NewAppModel(nil)
+	m := NewAppModel(nil, "")
 	m.state = StateViewer
 	m.session = claude.SessionInfo{SessionID: "test", Project: "/test"}
 	m.sessionActive = true
@@ -138,7 +138,7 @@ func TestAppModel_ActiveSessionIndicator(t *testing.T) {
 }
 
 func TestAppModel_TaskChangedMsgUpdatesBadge(t *testing.T) {
-	m := NewAppModel(nil)
+	m := NewAppModel(nil, "")
 	m.state = StateViewer
 	m.width = 80
 	m.height = 24
@@ -163,7 +163,7 @@ func TestAppModel_TaskChangedMsgUpdatesBadge(t *testing.T) {
 }
 
 func TestAppModel_WatcherErrorMsg(t *testing.T) {
-	m := NewAppModel(nil)
+	m := NewAppModel(nil, "")
 	m.state = StateViewer
 	m.session = claude.SessionInfo{SessionID: "test", Project: "/test"}
 	m.width = 80
@@ -191,7 +191,7 @@ func TestAppModel_WatcherErrorMsg(t *testing.T) {
 }
 
 func TestAppModel_ArrowKeyTabSwitch(t *testing.T) {
-	m := NewAppModel(nil)
+	m := NewAppModel(nil, "")
 	m.state = StateViewer
 	m.width = 80
 	m.height = 24
@@ -219,13 +219,13 @@ func TestAppModel_ArrowKeyTabSwitch(t *testing.T) {
 }
 
 func TestAppModel_CleanupNilCancel(t *testing.T) {
-	m := NewAppModel(nil)
+	m := NewAppModel(nil, "")
 	// cancelFunc is nil — Cleanup should not panic
 	m.Cleanup()
 }
 
 func TestAppModel_CleanupCallsCancel(t *testing.T) {
-	m := NewAppModel(nil)
+	m := NewAppModel(nil, "")
 	called := false
 	m.cancelFunc = func() { called = true }
 
@@ -237,7 +237,7 @@ func TestAppModel_CleanupCallsCancel(t *testing.T) {
 }
 
 func TestAppModel_SubagentsDiscoveredMsg(t *testing.T) {
-	m := NewAppModel(nil)
+	m := NewAppModel(nil, "")
 	m.state = StateViewer
 	m.width = 80
 	m.height = 24
@@ -254,7 +254,7 @@ func TestAppModel_SubagentsDiscoveredMsg(t *testing.T) {
 }
 
 func TestAppModel_ConversationUpdatedMsg(t *testing.T) {
-	m := NewAppModel(nil)
+	m := NewAppModel(nil, "")
 	m.state = StateViewer
 	m.width = 80
 	m.height = 24
@@ -275,7 +275,7 @@ func TestAppModel_ConversationUpdatedMsg(t *testing.T) {
 }
 
 func TestAppModel_ShiftArrowDelegatedToLogView(t *testing.T) {
-	m := NewAppModel(nil)
+	m := NewAppModel(nil, "")
 	m.state = StateViewer
 	m.width = 80
 	m.height = 24
@@ -308,7 +308,7 @@ func TestAppModel_ShiftArrowDelegatedToLogView(t *testing.T) {
 }
 
 func TestAppModel_ShiftArrowDelegatedToConversationView(t *testing.T) {
-	m := NewAppModel(nil)
+	m := NewAppModel(nil, "")
 	m.state = StateViewer
 	m.width = 80
 	m.height = 24

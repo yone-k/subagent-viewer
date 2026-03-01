@@ -8,7 +8,16 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
+)
+
+// SubagentStatus represents whether a subagent is still running or has completed.
+type SubagentStatus string
+
+const (
+	SubagentRunning SubagentStatus = "running"
+	SubagentClosed  SubagentStatus = "closed"
 )
 
 // ConversationEntryType represents the type of a conversation entry.
@@ -37,9 +46,10 @@ type ConversationEntry struct {
 type SubagentInfo struct {
 	AgentID      string
 	Slug         string
-	Prompt       string // first user message, truncated
-	Description  string // from parent conversation Agent tool_use
-	SubagentType string // from parent conversation Agent tool_use (e.g. "Explore", "general-task-executor")
+	Prompt       string         // first user message, truncated
+	Description  string         // from parent conversation Agent tool_use
+	SubagentType string         // from parent conversation Agent tool_use (e.g. "Explore", "general-task-executor")
+	Status       SubagentStatus // running or closed, determined from parent conversation
 	EntryCount   int
 	FilePath     string
 	CreatedAt    time.Time // file modification time, used for sorting
@@ -60,12 +70,14 @@ type rawMessage struct {
 
 // rawContentBlock represents a single content block within a message content array.
 type rawContentBlock struct {
-	Type     string          `json:"type"`
-	Text     string          `json:"text"`
-	Thinking string          `json:"thinking"`
-	Name     string          `json:"name"`
-	Input    json.RawMessage `json:"input"`
-	Content  json.RawMessage `json:"content"`
+	Type      string          `json:"type"`
+	ID        string          `json:"id"`
+	Text      string          `json:"text"`
+	Thinking  string          `json:"thinking"`
+	Name      string          `json:"name"`
+	Input     json.RawMessage `json:"input"`
+	Content   json.RawMessage `json:"content"`
+	ToolUseID string          `json:"tool_use_id"`
 }
 
 // ParseConversationFile parses a JSONL conversation file and returns entries and subagent info.
@@ -237,20 +249,26 @@ type agentToolInput struct {
 
 // AgentDescription holds description and subagent type extracted from parent conversation.
 type AgentDescription struct {
+	Prompt       string // full prompt from Agent tool_use input
 	Description  string
 	SubagentType string
+	ToolUseID    string
+	Status       SubagentStatus
 }
 
 // ExtractAgentDescriptions parses a parent conversation JSONL file and extracts
-// Agent tool_use descriptions. Returns a map from the full prompt string to AgentDescription.
-func ExtractAgentDescriptions(parentPath string) (map[string]AgentDescription, error) {
+// Agent tool_use descriptions. Returns a slice of AgentDescription in the order they appear,
+// with Status set to SubagentRunning or SubagentClosed based on whether a corresponding
+// tool_result entry exists.
+func ExtractAgentDescriptions(parentPath string) ([]AgentDescription, error) {
 	f, err := os.Open(parentPath)
 	if err != nil {
 		return nil, fmt.Errorf("opening parent conversation: %w", err)
 	}
 	defer f.Close()
 
-	descriptions := make(map[string]AgentDescription)
+	var result []AgentDescription
+	completedIDs := make(map[string]bool)
 
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
@@ -265,39 +283,46 @@ func ExtractAgentDescriptions(parentPath string) (map[string]AgentDescription, e
 			continue
 		}
 
-		if rl.Type != "assistant" {
-			continue
-		}
-
 		var msg rawMessage
 		if err := json.Unmarshal(rl.Message, &msg); err != nil {
 			continue
 		}
 
-		// Parse content blocks to find Agent tool_use
 		var rawBlocks []rawContentBlock
 		if err := json.Unmarshal(msg.Content, &rawBlocks); err != nil {
 			continue
 		}
 
-		for _, rb := range rawBlocks {
-			if rb.Type != "tool_use" || rb.Name != "Agent" {
-				continue
+		switch rl.Type {
+		case "assistant":
+			// Extract Agent tool_use blocks
+			for _, rb := range rawBlocks {
+				if rb.Type != "tool_use" || rb.Name != "Agent" {
+					continue
+				}
+				if rb.Input == nil {
+					continue
+				}
+				var input agentToolInput
+				if err := json.Unmarshal(rb.Input, &input); err != nil {
+					continue
+				}
+				if input.Prompt == "" || input.Description == "" {
+					continue
+				}
+				result = append(result, AgentDescription{
+					Prompt:       input.Prompt,
+					Description:  input.Description,
+					SubagentType: input.SubagentType,
+					ToolUseID:    rb.ID,
+				})
 			}
-			if rb.Input == nil {
-				continue
-			}
-			var input agentToolInput
-			if err := json.Unmarshal(rb.Input, &input); err != nil {
-				continue
-			}
-			if input.Prompt == "" || input.Description == "" {
-				continue
-			}
-			key := input.Prompt
-			descriptions[key] = AgentDescription{
-				Description:  input.Description,
-				SubagentType: input.SubagentType,
+		case "user":
+			// Track completed tool_result entries
+			for _, rb := range rawBlocks {
+				if rb.Type == "tool_result" && rb.ToolUseID != "" {
+					completedIDs[rb.ToolUseID] = true
+				}
 			}
 		}
 	}
@@ -305,46 +330,72 @@ func ExtractAgentDescriptions(parentPath string) (map[string]AgentDescription, e
 		return nil, fmt.Errorf("reading parent conversation: %w", err)
 	}
 
-	return descriptions, nil
+	// Determine status for each agent description
+	for i := range result {
+		if completedIDs[result[i].ToolUseID] {
+			result[i].Status = SubagentClosed
+		} else {
+			result[i].Status = SubagentRunning
+		}
+	}
+
+	return result, nil
 }
 
 // EnrichSubagentsWithDescriptions matches subagents with descriptions extracted
-// from the parent conversation. Matching strategy:
-//  1. Exact match: if the agent's Prompt exactly matches a key, use it immediately.
-//  2. Prefix match (fallback): compare the agent's Prompt (truncated to 120 chars)
-//     as a prefix of the full prompt keys. When multiple keys share the same prefix,
-//     the shortest (most specific) key is chosen; ties in length are broken by
-//     lexicographic order (smallest key wins) for determinism.
-func EnrichSubagentsWithDescriptions(agents []SubagentInfo, descriptions map[string]AgentDescription) {
+// from the parent conversation. Agents are sorted by CreatedAt ascending internally
+// for deterministic matching; the caller is responsible for any display-order sorting.
+// Matching strategy (each description is consumed once matched to handle duplicates):
+//  1. Exact match: the agent's Prompt exactly matches the description's full prompt.
+//  2. Prefix match (fallback): the agent's Prompt (truncated to 120 chars) is a prefix
+//     of the description's full prompt.
+func EnrichSubagentsWithDescriptions(agents []SubagentInfo, descriptions []AgentDescription) {
+	// Sort agents by CreatedAt ascending for deterministic matching
+	sort.Slice(agents, func(i, j int) bool {
+		return agents[i].CreatedAt.Before(agents[j].CreatedAt)
+	})
+
+	// Track which descriptions have been consumed
+	consumed := make([]bool, len(descriptions))
+
 	for i := range agents {
 		prompt := agents[i].Prompt
 		if prompt == "" {
 			continue
 		}
 
-		// 1. Try exact match first
-		if desc, ok := descriptions[prompt]; ok {
-			agents[i].Description = desc.Description
-			agents[i].SubagentType = desc.SubagentType
-			continue
+		matchIdx := -1
+
+		// 1. Try exact match first (agent prompt == description's full prompt)
+		for j, desc := range descriptions {
+			if consumed[j] {
+				continue
+			}
+			if desc.Prompt == prompt {
+				matchIdx = j
+				break
+			}
 		}
 
-		// 2. Fallback to prefix match
-		promptRunes := []rune(prompt)
-		bestKey := ""
-		for key := range descriptions {
-			keyRunes := []rune(key)
-			if len(keyRunes) >= len(promptRunes) && string(keyRunes[:len(promptRunes)]) == prompt {
-				keyLen := len([]rune(key))
-				bestLen := len([]rune(bestKey))
-				if bestKey == "" || keyLen < bestLen || (keyLen == bestLen && key < bestKey) {
-					bestKey = key
+		// 2. Fallback to prefix match (agent prompt is a prefix of description's full prompt)
+		if matchIdx == -1 {
+			for j, desc := range descriptions {
+				if consumed[j] {
+					continue
+				}
+				if strings.HasPrefix(desc.Prompt, prompt) {
+					matchIdx = j
+					break
 				}
 			}
 		}
-		if bestKey != "" {
-			agents[i].Description = descriptions[bestKey].Description
-			agents[i].SubagentType = descriptions[bestKey].SubagentType
+
+		// Apply matched description
+		if matchIdx >= 0 {
+			agents[i].Description = descriptions[matchIdx].Description
+			agents[i].SubagentType = descriptions[matchIdx].SubagentType
+			agents[i].Status = descriptions[matchIdx].Status
+			consumed[matchIdx] = true
 		}
 	}
 }
@@ -359,6 +410,12 @@ func DiscoverSubagents(subagentsDir string) ([]SubagentInfo, error) {
 
 	var agents []SubagentInfo
 	for _, path := range matches {
+		// Skip internal compact agents created by /compact command
+		base := filepath.Base(path)
+		if strings.Contains(base, "compact") {
+			continue
+		}
+
 		_, info, err := ParseConversationFile(path)
 		if err != nil {
 			continue // skip broken files

@@ -53,10 +53,10 @@ type AppModel struct {
 
 // NewAppModel creates a new AppModel.
 // statsView is zero-valued; initialized when session is selected.
-func NewAppModel(sessions []claude.SessionInfo) AppModel {
+func NewAppModel(sessions []claude.SessionInfo, currentProject string) AppModel {
 	return AppModel{
 		state:     StateSelector,
-		selector:  NewSelectorModel(sessions),
+		selector:  NewSelectorModel(sessions, currentProject),
 		tabs:      NewTabsModel(),
 		taskView:  NewTaskViewModel(),
 		agentView: NewAgentViewModel(),

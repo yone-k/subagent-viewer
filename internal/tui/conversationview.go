@@ -275,11 +275,11 @@ func (m *ConversationViewModel) filteredBlocks() []renderedBlock {
 		// Add separator
 		var tag string
 		if entry.Type == claude.EntryTypeUser {
-			tag = ConversationUserStyle.Render("[U]")
+			tag = ConversationUserStyle.Render("USER")
 		} else {
-			tag = ConversationAssistantStyle.Render("[A]")
+			tag = ConversationAssistantStyle.Render("AGENT")
 		}
-		sepLine := ConversationSeparatorStyle.Render(strings.Repeat("─", contentWidth/3)) + " " + tag
+		sepLine := tag + " " + ConversationSeparatorStyle.Render(strings.Repeat("─", contentWidth/3))
 		blocks = append(blocks, renderedBlock{
 			lines: []string{sepLine},
 		})

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -14,14 +15,16 @@ const conversationPollInterval = 1 * time.Second
 
 // ConversationWatcher polls subagent conversation files for changes.
 type ConversationWatcher struct {
-	dir         string
-	program     *tea.Program
-	sessionID   string
-	projectPath string
-	findDirFunc func(string) (string, error)
-	offsets     map[string]int64
-	entries     map[string][]claude.ConversationEntry
-	infos       map[string]*claude.SubagentInfo
+	dir          string
+	program      *tea.Program
+	sessionID    string
+	projectPath  string
+	findDirFunc  func(string) (string, error)
+	offsets      map[string]int64
+	entries      map[string][]claude.ConversationEntry
+	infos        map[string]*claude.SubagentInfo
+	parentPath   string // cached parent conversation path (empty until resolved)
+	parentOffset int64
 }
 
 // NewConversationWatcher creates a new ConversationWatcher.
@@ -74,6 +77,54 @@ func (cw *ConversationWatcher) tryDiscoverDir() {
 	}
 }
 
+// resolveParentPath computes and caches the parent conversation JSONL path.
+// It uses projectPath if available, otherwise derives the path from
+// the subagents directory structure. Returns "" if neither is available yet.
+func (cw *ConversationWatcher) resolveParentPath() string {
+	if cw.parentPath != "" {
+		return cw.parentPath
+	}
+	if cw.projectPath != "" {
+		cw.parentPath = claude.ParentConversationPath(cw.projectPath, cw.sessionID)
+		return cw.parentPath
+	}
+	if cw.dir != "" {
+		// dir = .../projects/{encoded}/{sessionID}/subagents
+		// parent = .../projects/{encoded}/{sessionID}.jsonl
+		sessionDir := filepath.Dir(cw.dir)
+		cw.parentPath = sessionDir + ".jsonl"
+		return cw.parentPath
+	}
+	return ""
+}
+
+// enrichAndSendAgents enriches agents with descriptions from the parent
+// conversation, updates parentOffset, and sends a SubagentsDiscoveredMsg.
+func (cw *ConversationWatcher) enrichAndSendAgents(agents []claude.SubagentInfo) {
+	parentPath := cw.resolveParentPath()
+	if parentPath != "" {
+		descriptions, err := claude.ExtractAgentDescriptions(parentPath)
+		if err == nil {
+			claude.EnrichSubagentsWithDescriptions(agents, descriptions)
+			// Only default unset status to Running when enrichment succeeded;
+			// if the parent file could not be read, status remains empty (unknown).
+			for i := range agents {
+				if agents[i].Status == "" {
+					agents[i].Status = claude.SubagentRunning
+				}
+			}
+		}
+		if info, statErr := os.Stat(parentPath); statErr == nil {
+			cw.parentOffset = info.Size()
+		}
+	}
+	// Sort descending (newest first) for display
+	sort.Slice(agents, func(i, j int) bool {
+		return agents[i].CreatedAt.After(agents[j].CreatedAt)
+	})
+	cw.program.Send(SubagentsDiscoveredMsg{Agents: agents})
+}
+
 // scan does the initial full scan of all agent files.
 func (cw *ConversationWatcher) scan() {
 	if cw.dir == "" {
@@ -88,14 +139,7 @@ func (cw *ConversationWatcher) scan() {
 		return
 	}
 
-	// Enrich agents with descriptions from parent conversation
-	if cw.projectPath != "" {
-		parentPath := claude.ParentConversationPath(cw.projectPath, cw.sessionID)
-		descriptions, _ := claude.ExtractAgentDescriptions(parentPath)
-		claude.EnrichSubagentsWithDescriptions(agents, descriptions)
-	}
-
-	cw.program.Send(SubagentsDiscoveredMsg{Agents: agents})
+	cw.enrichAndSendAgents(agents)
 
 	// Load all conversations and track offsets
 	for _, agent := range agents {
@@ -127,6 +171,16 @@ func (cw *ConversationWatcher) scan() {
 func (cw *ConversationWatcher) poll() {
 	if cw.dir == "" {
 		return
+	}
+
+	// Check if parent conversation file has changed
+	parentChanged := false
+	if parentPath := cw.resolveParentPath(); parentPath != "" {
+		if info, err := os.Stat(parentPath); err == nil {
+			if info.Size() != cw.parentOffset {
+				parentChanged = true
+			}
+		}
 	}
 
 	// Check for new agent files
@@ -163,17 +217,11 @@ func (cw *ConversationWatcher) poll() {
 		}
 	}
 
-	if newFileFound {
-		// Re-discover agents to update the list
+	// Send updated agents list if parent changed or new files were found
+	if parentChanged || newFileFound {
 		agents, err := claude.DiscoverSubagents(cw.dir)
 		if err == nil {
-			// Enrich agents with descriptions from parent conversation
-			if cw.projectPath != "" {
-				parentPath := claude.ParentConversationPath(cw.projectPath, cw.sessionID)
-				descriptions, _ := claude.ExtractAgentDescriptions(parentPath)
-				claude.EnrichSubagentsWithDescriptions(agents, descriptions)
-			}
-			cw.program.Send(SubagentsDiscoveredMsg{Agents: agents})
+			cw.enrichAndSendAgents(agents)
 		}
 	}
 

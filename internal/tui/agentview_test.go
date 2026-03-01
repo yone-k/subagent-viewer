@@ -75,6 +75,41 @@ func TestAgentView_ModeTransition(t *testing.T) {
 	})
 }
 
+// TestAgentViewModel_ViewStatus verifies that status badges are displayed for running and closed agents.
+func TestAgentViewModel_ViewStatus(t *testing.T) {
+	agents := []claude.SubagentInfo{
+		{
+			AgentID: "running-agent",
+			Prompt:  "running test",
+			Status:  claude.SubagentRunning,
+		},
+		{
+			AgentID: "closed-agent",
+			Prompt:  "closed test",
+			Status:  claude.SubagentClosed,
+		},
+	}
+
+	m := NewAgentViewModel()
+	m.SetSize(80, 24)
+
+	// Inject agents via SubagentsDiscoveredMsg
+	updated, _ := m.Update(watcher.SubagentsDiscoveredMsg{Agents: agents})
+	m = updated.(AgentViewModel)
+
+	view := m.View()
+
+	// Verify Running badge (yellow ●)
+	if !strings.Contains(view, "●") {
+		t.Error("expected running indicator ● in view")
+	}
+
+	// Verify Closed badge (green ✓)
+	if !strings.Contains(view, "✓") {
+		t.Error("expected completed indicator ✓ in view")
+	}
+}
+
 // TestAgentView_ConversationUpdatedMsg verifies that ConversationUpdatedMsg updates stored data.
 func TestAgentView_ConversationUpdatedMsg(t *testing.T) {
 	m := NewAgentViewModel()
