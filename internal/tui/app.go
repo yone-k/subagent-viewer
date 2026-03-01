@@ -43,7 +43,6 @@ type AppModel struct {
 	taskView  TaskViewModel
 	agentView AgentViewModel
 	logView   LogViewModel
-	fileView  FileViewModel
 	statsView StatsViewModel
 
 	// Watcher lifecycle
@@ -61,7 +60,6 @@ func NewAppModel(sessions []claude.SessionInfo, currentProject string) AppModel 
 		taskView:  NewTaskViewModel(),
 		agentView: NewAgentViewModel(),
 		logView:   NewLogViewModel(),
-		fileView:  NewFileViewModel(),
 	}
 }
 
@@ -75,7 +73,6 @@ func NewAppModelWithSession(session claude.SessionInfo) AppModel {
 		taskView:  NewTaskViewModel(),
 		agentView: NewAgentViewModel(),
 		logView:   NewLogViewModel(),
-		fileView:  NewFileViewModel(),
 		statsView: NewStatsViewModel(),
 	}
 }
@@ -148,11 +145,6 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case watcher.LogEntriesMsg:
 		newModel, cmd := m.logView.Update(msg)
 		m.logView = newModel.(LogViewModel)
-		return m, cmd
-
-	case watcher.FileHistoryUpdatedMsg:
-		newModel, cmd := m.fileView.Update(msg)
-		m.fileView = newModel.(FileViewModel)
 		return m, cmd
 
 	case watcher.SubagentsDiscoveredMsg:
@@ -229,10 +221,6 @@ func (m *AppModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.tabs.SetActive(3)
 		m.recomputeContentSize()
 		return m, nil
-	case key.Matches(msg, GlobalKeys.Tab5):
-		m.tabs.SetActive(4)
-		m.recomputeContentSize()
-		return m, nil
 	case key.Matches(msg, GlobalKeys.NextTab):
 		m.tabs.NextTab()
 		m.recomputeContentSize()
@@ -259,10 +247,6 @@ func (m *AppModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.logView = newModel.(LogViewModel)
 		cmd = c
 	case 3:
-		newModel, c := m.fileView.Update(msg)
-		m.fileView = newModel.(FileViewModel)
-		cmd = c
-	case 4:
 		newModel, c := m.statsView.Update(msg)
 		m.statsView = newModel.(StatsViewModel)
 		cmd = c
@@ -302,8 +286,6 @@ func (m *AppModel) View() string {
 	case 2:
 		b.WriteString(m.logView.View())
 	case 3:
-		b.WriteString(m.fileView.View())
-	case 4:
 		b.WriteString(m.statsView.View())
 	}
 
@@ -325,16 +307,16 @@ func (m *AppModel) footerHelp() string {
 	case 1:
 		switch m.agentView.Mode() {
 		case AgentViewModeList:
-			keys = "enter: 会話表示  1-5: タブ切替  q: 終了"
+			keys = "enter: 会話表示  1-4: タブ切替  q: 終了"
 		case AgentViewModeConversation:
 			keys = "j/k: スクロール  shift+←→: フィルタ選択  enter: フィルタ切替  esc: 戻る  q: 終了"
 		default:
-			keys = "1-5/←→: タブ切替  q: 終了"
+			keys = "1-4/←→: タブ切替  q: 終了"
 		}
 	case 2:
 		keys = "j/k: スクロール  shift+←→: フィルタ選択  enter: フィルタ切替  /: 検索  q: 終了"
 	default:
-		keys = "1-5/←→: タブ切替  q: 終了"
+		keys = "1-4/←→: タブ切替  q: 終了"
 	}
 
 	session := fmt.Sprintf("Session: %s", m.session.SessionID)
@@ -356,7 +338,6 @@ func (m *AppModel) recomputeContentSize() {
 	m.taskView.SetSize(m.width, contentHeight)
 	m.agentView.SetSize(m.width, contentHeight)
 	m.logView.SetSize(m.width, contentHeight)
-	m.fileView.SetSize(m.width, contentHeight)
 	m.statsView.SetSize(m.width, contentHeight)
 }
 
@@ -387,13 +368,6 @@ func (m *AppModel) StartWatchers(program *tea.Program) {
 	if _, err := os.Stat(tasksDir); err == nil {
 		tw := watcher.NewTaskWatcher(tasksDir, program)
 		go tw.Start(ctx)
-	}
-
-	// Start file history watcher if directory exists (fsnotify requires existing dir)
-	fhDir := claude.FileHistoryDir(sessionID)
-	if _, err := os.Stat(fhDir); err == nil {
-		fw := watcher.NewFileWatcher(fhDir, program)
-		go fw.Start(ctx)
 	}
 
 	// Start conversation watcher for subagent JSONL files

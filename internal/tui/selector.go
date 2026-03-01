@@ -47,9 +47,6 @@ func (i sessionItem) Description() string {
 	if i.session.HasDebugLog {
 		indicators = append(indicators, "Logs")
 	}
-	if i.session.HasFileHistory {
-		indicators = append(indicators, "Files")
-	}
 	if len(indicators) > 0 {
 		parts = append(parts, "["+strings.Join(indicators, "|")+"]")
 	}

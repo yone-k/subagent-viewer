@@ -59,7 +59,7 @@ func TestAppModel_TabSwitch(t *testing.T) {
 		t.Errorf("Active tab = %d, want 2", mPtr.tabs.Active)
 	}
 
-	// Switch to tab 4 (Files)
+	// Switch to tab 4 (Stats)
 	newModel, _ = mPtr.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("4")})
 	mPtr = newModel.(*AppModel)
 	if mPtr.tabs.Active != 3 {

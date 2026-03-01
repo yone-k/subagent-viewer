@@ -8,7 +8,6 @@ type GlobalKeyMap struct {
 	Tab2    key.Binding
 	Tab3    key.Binding
 	Tab4    key.Binding
-	Tab5    key.Binding
 	NextTab key.Binding
 	PrevTab key.Binding
 	Quit    key.Binding
@@ -29,11 +28,7 @@ var GlobalKeys = GlobalKeyMap{
 	),
 	Tab4: key.NewBinding(
 		key.WithKeys("4"),
-		key.WithHelp("4", "ファイル"),
-	),
-	Tab5: key.NewBinding(
-		key.WithKeys("5"),
-		key.WithHelp("5", "統計"),
+		key.WithHelp("4", "統計"),
 	),
 	NextTab: key.NewBinding(
 		key.WithKeys("tab", "right"),
@@ -78,23 +73,6 @@ var LogKeys = LogKeyMap{
 	Escape: key.NewBinding(
 		key.WithKeys("esc"),
 		key.WithHelp("esc", "検索終了"),
-	),
-}
-
-// FileKeyMap defines keybindings for the Files tab.
-type FileKeyMap struct {
-	Enter  key.Binding
-	Escape key.Binding
-}
-
-var FileKeys = FileKeyMap{
-	Enter: key.NewBinding(
-		key.WithKeys("enter"),
-		key.WithHelp("enter", "展開/表示"),
-	),
-	Escape: key.NewBinding(
-		key.WithKeys("esc"),
-		key.WithHelp("esc", "一覧に戻る"),
 	),
 }
 

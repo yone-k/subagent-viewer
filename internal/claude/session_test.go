@@ -50,15 +50,6 @@ func setupTestBase(t *testing.T) string {
 		t.Fatal(err)
 	}
 
-	// Create file-history dir for session-1
-	fhDir := filepath.Join(base, "file-history", "session-1")
-	if err := os.MkdirAll(fhDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(fhDir, "abcd1234abcd1234@v1"), []byte("test"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
 	// Create .claude.json (note: in real usage this is ~/.claude.json, but for tests we put it at basePath/../.claude.json)
 	// We'll use a separate configPath parameter approach
 	configPath := filepath.Join(base, "claude.json")
@@ -214,26 +205,6 @@ func TestDiscoverSessions_HasDebugLog(t *testing.T) {
 	}
 }
 
-func TestDiscoverSessions_HasFileHistory(t *testing.T) {
-	base := setupTestBase(t)
-	sessions, err := DiscoverSessions(base, filepath.Join(base, "claude.json"))
-	if err != nil {
-		t.Fatalf("DiscoverSessions() error = %v", err)
-	}
-	for _, s := range sessions {
-		if s.SessionID == "session-1" {
-			if !s.HasFileHistory {
-				t.Error("session-1 HasFileHistory should be true")
-			}
-		}
-		if s.SessionID == "session-2" {
-			if s.HasFileHistory {
-				t.Error("session-2 HasFileHistory should be false")
-			}
-		}
-	}
-}
-
 func TestDiscoverSessions_StatsAttachment(t *testing.T) {
 	base := setupTestBase(t)
 	sessions, err := DiscoverSessions(base, filepath.Join(base, "claude.json"))
@@ -290,9 +261,6 @@ func TestBuildSessionInfo(t *testing.T) {
 		if !info.HasDebugLog {
 			t.Error("HasDebugLog should be true for session-1")
 		}
-		if !info.HasFileHistory {
-			t.Error("HasFileHistory should be true for session-1")
-		}
 	})
 
 	t.Run("session without matching project leaves Project empty", func(t *testing.T) {
@@ -313,9 +281,6 @@ func TestBuildSessionInfo(t *testing.T) {
 		if info.HasDebugLog {
 			t.Error("HasDebugLog should be false for session-2")
 		}
-		if info.HasFileHistory {
-			t.Error("HasFileHistory should be false for session-2")
-		}
 	})
 
 	t.Run("unknown session has all fields empty/false", func(t *testing.T) {
@@ -326,7 +291,7 @@ func TestBuildSessionInfo(t *testing.T) {
 		if info.Stats != nil {
 			t.Error("Stats should be nil for nonexistent session")
 		}
-		if info.HasTasks || info.HasDebugLog || info.HasFileHistory {
+		if info.HasTasks || info.HasDebugLog {
 			t.Error("capabilities should all be false for nonexistent session")
 		}
 	})

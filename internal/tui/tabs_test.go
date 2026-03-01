@@ -40,9 +40,6 @@ func TestTabsModel_View(t *testing.T) {
 	if !strings.Contains(view, "Logs") {
 		t.Error("View should contain 'Logs'")
 	}
-	if !strings.Contains(view, "Files") {
-		t.Error("View should contain 'Files'")
-	}
 	if !strings.Contains(view, "Stats") {
 		t.Error("View should contain 'Stats'")
 	}
@@ -84,9 +81,9 @@ func TestTabsModel_PrevTabWrap(t *testing.T) {
 		t.Fatalf("precondition: Active = %d, want 0", m.Active)
 	}
 
-	// PrevTab at 0 should wrap to last tab (4)
+	// PrevTab at 0 should wrap to last tab (3)
 	m.PrevTab()
-	if m.Active != 4 {
-		t.Errorf("PrevTab from 0: Active = %d, want 4 (wrap to last)", m.Active)
+	if m.Active != 3 {
+		t.Errorf("PrevTab from 0: Active = %d, want 3 (wrap to last)", m.Active)
 	}
 }

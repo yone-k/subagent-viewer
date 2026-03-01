@@ -44,11 +44,6 @@ func DebugLogPath(sessionID string) string {
 	return filepath.Join(ClaudeDir(), "debug", sessionID+".txt")
 }
 
-// FileHistoryDir returns the path to ~/.claude/file-history/{sessionID}
-func FileHistoryDir(sessionID string) string {
-	return filepath.Join(ClaudeDir(), "file-history", sessionID)
-}
-
 // GlobalConfigPath returns the path to ~/.claude.json
 func GlobalConfigPath() string {
 	ensureHomeDir()

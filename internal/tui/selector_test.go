@@ -198,9 +198,8 @@ func TestSelectorModel_DisplayFormat(t *testing.T) {
 			Project:        "/test/project",
 			Timestamp:      1772326237190,
 			FirstInput:     "プロジェクトを分析して",
-			HasTasks:       true,
-			HasDebugLog:    true,
-			HasFileHistory: false,
+			HasTasks:    true,
+			HasDebugLog: true,
 		},
 	}
 	m := NewSelectorModel(sessions, "")

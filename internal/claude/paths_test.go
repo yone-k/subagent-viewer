@@ -56,19 +56,6 @@ func TestHistoryPath(t *testing.T) {
 	}
 }
 
-func TestFileHistoryDir(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatal(err)
-	}
-	sessionID := "test-session"
-	got := FileHistoryDir(sessionID)
-	want := filepath.Join(home, ".claude", "file-history", sessionID)
-	if got != want {
-		t.Errorf("FileHistoryDir(%q) = %q, want %q", sessionID, got, want)
-	}
-}
-
 func TestGlobalConfigPath(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {

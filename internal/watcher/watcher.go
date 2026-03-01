@@ -20,11 +20,6 @@ type LogEntriesMsg struct {
 	Initial bool // true for initial tail load
 }
 
-// FileHistoryUpdatedMsg is sent when file history is updated.
-type FileHistoryUpdatedMsg struct {
-	Groups []claude.FileGroup
-}
-
 // WatcherErrorMsg is sent when a watcher encounters an error.
 type WatcherErrorMsg struct {
 	Source string

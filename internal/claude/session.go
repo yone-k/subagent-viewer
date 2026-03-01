@@ -18,8 +18,7 @@ type SessionInfo struct {
 	FirstInput     string
 	HasTasks       bool
 	HasDebugLog    bool
-	HasFileHistory bool
-	Stats          *ProjectStats
+	Stats *ProjectStats
 }
 
 // DiscoverSessions discovers sessions from the given base path (typically ~/.claude).
@@ -93,8 +92,6 @@ func DiscoverSessions(basePath, configPath string) ([]SessionInfo, error) {
 		// Check capabilities
 		info.HasTasks = hasTaskFiles(filepath.Join(basePath, "tasks", sd.sessionID))
 		info.HasDebugLog = FileExists(filepath.Join(basePath, "debug", sd.sessionID+".txt"))
-		info.HasFileHistory = HasDirFiles(filepath.Join(basePath, "file-history", sd.sessionID))
-
 		// Attach stats for the project
 		if stats, ok := projectStats[sd.project]; ok {
 			info.Stats = stats
@@ -130,15 +127,6 @@ func FileExists(path string) bool {
 	return err == nil
 }
 
-// HasDirFiles returns true if the given directory contains at least one entry.
-func HasDirFiles(dir string) bool {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return false
-	}
-	return len(entries) > 0
-}
-
 // BuildSessionInfo constructs a SessionInfo for a single session without
 // scanning history.jsonl. It detects capabilities from the filesystem
 // and attaches project path and stats from configPath.
@@ -147,7 +135,6 @@ func BuildSessionInfo(basePath, configPath, sessionID string) SessionInfo {
 		SessionID:      sessionID,
 		HasTasks:       hasTaskFiles(filepath.Join(basePath, "tasks", sessionID)),
 		HasDebugLog:    FileExists(filepath.Join(basePath, "debug", sessionID+".txt")),
-		HasFileHistory: HasDirFiles(filepath.Join(basePath, "file-history", sessionID)),
 	}
 
 	// Try to load stats from config (project unknown, so iterate to find matching session)
