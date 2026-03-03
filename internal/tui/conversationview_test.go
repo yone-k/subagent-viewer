@@ -325,7 +325,7 @@ func TestConversationView_SeparatorSkippedWhenAllBlocksFiltered(t *testing.T) {
 
 	// Default: tool_use is off, so this entry's separator should also be hidden
 	view := m.View()
-	if strings.Contains(view, "AGENT") {
+	if strings.Contains(view, "SUB AGENT") {
 		t.Error("separator should be hidden when all blocks in entry are filtered out")
 	}
 }
@@ -338,11 +338,11 @@ func TestConversationView_SeparatorShowsCorrectTag(t *testing.T) {
 	m := newTestConversationView(entries)
 
 	view := m.View()
-	if !strings.Contains(view, "USER") {
-		t.Error("user entry should have USER separator tag")
+	if !strings.Contains(view, "MAIN AGENT") {
+		t.Error("user entry should have MAIN AGENT separator tag")
 	}
-	if !strings.Contains(view, "AGENT") {
-		t.Error("assistant entry should have AGENT separator tag")
+	if !strings.Contains(view, "SUB AGENT") {
+		t.Error("assistant entry should have SUB AGENT separator tag")
 	}
 }
 
