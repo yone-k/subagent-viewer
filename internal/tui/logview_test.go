@@ -262,9 +262,11 @@ func TestLogView_ScrollOffset_ClampOnFilterChange(t *testing.T) {
 	newModel, _ = m.Update(enterKey)
 	m = newModel.(LogViewModel)
 
-	// scrollOffset should be clamped to the number of filtered entries (4)
-	if m.scrollOffset > 4 {
-		t.Errorf("scrollOffset = %d, want <= 4 after filter change", m.scrollOffset)
+	// After enabling DEBUG: 4 short entries = 4 rendered lines
+	// viewHeight = 24 - 4 = 20, maxScroll = max(4 - 20, 0) = 0
+	// scrollOffset should be clamped to 0
+	if m.scrollOffset != 0 {
+		t.Errorf("scrollOffset = %d, want 0 (totalLines 4 < viewHeight 20)", m.scrollOffset)
 	}
 }
 
@@ -307,5 +309,175 @@ func TestLogView_FilterCursorNavigation(t *testing.T) {
 	m = newModel.(LogViewModel)
 	if m.filterCursor != 0 {
 		t.Errorf("filterCursor should stay at 0, got %d", m.filterCursor)
+	}
+}
+
+func TestLogView_WordWrap(t *testing.T) {
+	m := NewLogViewModel()
+	m.SetSize(60, 24)
+
+	// Message much longer than available width after prefix (~21 chars for ERROR)
+	longMsg := strings.TrimSpace(strings.Repeat("word ", 20))
+	entries := []claude.LogEntry{
+		makeLogEntry(claude.LevelERROR, longMsg),
+	}
+	newModel, _ := m.Update(watcher.LogEntriesMsg{Entries: entries, Initial: true})
+	m = newModel.(LogViewModel)
+
+	view := m.View()
+	lines := strings.Split(view, "\n")
+
+	// Count lines containing "word" (the message content)
+	wordLines := 0
+	for _, line := range lines {
+		if strings.Contains(line, "word") {
+			wordLines++
+		}
+	}
+	if wordLines < 2 {
+		t.Errorf("expected long message to wrap into at least 2 lines, got %d lines containing 'word'", wordLines)
+	}
+}
+
+func TestLogView_ContinuationLineIndent(t *testing.T) {
+	m := NewLogViewModel()
+	m.SetSize(60, 24)
+
+	longMsg := strings.TrimSpace(strings.Repeat("word ", 20))
+	entries := []claude.LogEntry{
+		makeLogEntry(claude.LevelERROR, longMsg),
+		makeLogEntry(claude.LevelMCP, longMsg),
+	}
+	newModel, _ := m.Update(watcher.LogEntriesMsg{Entries: entries, Initial: true})
+	m = newModel.(LogViewModel)
+
+	view := m.View()
+	lines := strings.Split(view, "\n")
+
+	// Collect indent widths from continuation lines (start with spaces, contain "word")
+	indentWidths := make(map[int]bool)
+	for _, line := range lines {
+		if strings.HasPrefix(line, " ") && strings.Contains(line, "word") {
+			trimmed := strings.TrimLeft(line, " ")
+			indent := len(line) - len(trimmed)
+			if indent > 0 {
+				indentWidths[indent] = true
+			}
+		}
+	}
+
+	// There should be continuation lines with leading spaces
+	if len(indentWidths) == 0 {
+		t.Fatal("expected continuation lines with leading spaces, found none")
+	}
+
+	// ERROR ([ERROR]=7) and MCP ([MCP]=5) have different prefix widths,
+	// so their continuation lines should have different indent widths
+	if len(indentWidths) < 2 {
+		t.Errorf("expected different indent widths for ERROR and MCP levels, got single width: %v", indentWidths)
+	}
+}
+
+func TestLogView_ShortMessageNoWrap(t *testing.T) {
+	m := NewLogViewModel()
+	m.SetSize(80, 24)
+
+	entries := []claude.LogEntry{
+		makeLogEntry(claude.LevelERROR, "short msg"),
+	}
+	newModel, _ := m.Update(watcher.LogEntriesMsg{Entries: entries, Initial: true})
+	m = newModel.(LogViewModel)
+
+	view := m.View()
+	lines := strings.Split(view, "\n")
+
+	// Short message should appear on exactly 1 line
+	msgLines := 0
+	for _, line := range lines {
+		if strings.Contains(line, "short msg") {
+			msgLines++
+		}
+	}
+	if msgLines != 1 {
+		t.Errorf("short message should appear on exactly 1 line, got %d", msgLines)
+	}
+}
+
+func TestLogView_LineScroll(t *testing.T) {
+	m := NewLogViewModel()
+	m.SetSize(40, 10) // viewHeight = 10 - 4 = 6
+
+	// Create entries with long messages that wrap to multiple lines at width 40
+	longMsg := strings.TrimSpace(strings.Repeat("word ", 15))
+	entries := make([]claude.LogEntry, 5)
+	for i := range entries {
+		entries[i] = makeLogEntry(claude.LevelERROR, longMsg)
+	}
+	newModel, _ := m.Update(watcher.LogEntriesMsg{Entries: entries, Initial: true})
+	m = newModel.(LogViewModel)
+
+	if !m.isAtBottom() {
+		t.Fatal("should be at bottom after initial load")
+	}
+
+	// With wrapping, scrollOffset at bottom should be greater than entry count
+	// (line-based scrolling produces more scroll positions than entry-based)
+	bottomOffset := m.scrollOffset
+	if bottomOffset <= len(entries) {
+		t.Errorf("scrollOffset at bottom (%d) should be > entry count (%d) when messages wrap to multiple lines",
+			bottomOffset, len(entries))
+	}
+
+	// Scroll up with k: scrollOffset should decrease by 1
+	prevOffset := m.scrollOffset
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	m = newModel.(LogViewModel)
+	if m.scrollOffset != prevOffset-1 {
+		t.Errorf("after k, scrollOffset should decrease by 1: was %d, got %d", prevOffset, m.scrollOffset)
+	}
+
+	// Scroll down with j: scrollOffset should increase by 1
+	prevOffset = m.scrollOffset
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	m = newModel.(LogViewModel)
+	if m.scrollOffset != prevOffset+1 {
+		t.Errorf("after j, scrollOffset should increase by 1: was %d, got %d", prevOffset, m.scrollOffset)
+	}
+}
+
+func TestLogView_ResizeClampScroll(t *testing.T) {
+	m := NewLogViewModel()
+	m.SetSize(40, 10) // narrow width
+
+	// Create entries with long messages that wrap at narrow width
+	longMsg := strings.TrimSpace(strings.Repeat("word ", 15))
+	entries := make([]claude.LogEntry, 5)
+	for i := range entries {
+		entries[i] = makeLogEntry(claude.LevelERROR, longMsg)
+	}
+	newModel, _ := m.Update(watcher.LogEntriesMsg{Entries: entries, Initial: true})
+	m = newModel.(LogViewModel)
+
+	if !m.isAtBottom() {
+		t.Fatal("should be at bottom after initial load")
+	}
+	narrowBottomOffset := m.scrollOffset
+
+	// Widen to 200: messages no longer wrap → fewer total lines → lower maxScroll
+	m.SetSize(200, 10)
+
+	// Should not panic
+	view := m.View()
+	if view == "" {
+		t.Fatal("View should not return empty string after resize")
+	}
+
+	// After widening, scrollOffset should be clamped to the new (lower) maxScroll.
+	// At width 200, all messages fit on one line → 5 total lines.
+	// viewHeight = 6, maxScroll = max(5 - 6, 0) = 0.
+	// So scrollOffset should be less than the narrow bottom offset.
+	if m.scrollOffset >= narrowBottomOffset {
+		t.Errorf("scrollOffset (%d) should be less than narrow bottom offset (%d) after widening",
+			m.scrollOffset, narrowBottomOffset)
 	}
 }
