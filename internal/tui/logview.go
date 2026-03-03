@@ -7,7 +7,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/yone-k/cc-subagent-viewer/internal/claude"
 	"github.com/yone-k/cc-subagent-viewer/internal/watcher"
 )
@@ -31,17 +30,18 @@ var logFilterDefs = []logFilterDef{
 
 // LogViewModel manages the Logs tab view.
 type LogViewModel struct {
-	entries       []claude.LogEntry
-	filterLevels  map[claude.LogLevel]bool
-	searchQuery   string
-	searchInput   textinput.Model
-	searching     bool
-	filterCursor  int
-	scrollOffset  int
-	width         int
-	height        int
-	filteredCache []claude.LogEntry
-	filteredDirty bool
+	entries            []claude.LogEntry
+	filterLevels       map[claude.LogLevel]bool
+	searchQuery        string
+	searchInput        textinput.Model
+	searching          bool
+	filterCursor       int
+	scrollOffset       int
+	width              int
+	height             int
+	filteredCache      []claude.LogEntry
+	filteredDirty      bool
+	renderedLinesCache []string
 }
 
 // NewLogViewModel creates a new LogViewModel.
@@ -67,8 +67,13 @@ func NewLogViewModel() LogViewModel {
 
 // SetSize updates the view dimensions.
 func (m *LogViewModel) SetSize(width, height int) {
+	if m.width == width && m.height == height {
+		return
+	}
 	m.width = width
 	m.height = height
+	m.filteredDirty = true
+	m.clampScroll()
 }
 
 // EntryCount returns the number of stored entries.
@@ -113,10 +118,7 @@ func (m LogViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.searching = false
 				m.searchInput.Blur()
 				m.filteredDirty = true
-				filtered := m.filteredEntries()
-				if m.scrollOffset > len(filtered) {
-					m.scrollOffset = len(filtered)
-				}
+				m.clampScroll()
 				return m, nil
 			default:
 				var cmd tea.Cmd
@@ -140,10 +142,7 @@ func (m LogViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			level := logFilterDefs[m.filterCursor].level
 			m.filterLevels[level] = !m.filterLevels[level]
 			m.filteredDirty = true
-			filtered := m.filteredEntries()
-			if m.scrollOffset > len(filtered) {
-				m.scrollOffset = len(filtered)
-			}
+			m.clampScroll()
 		case key.Matches(msg, LogKeys.Search):
 			m.searching = true
 			m.searchInput.Focus()
@@ -156,10 +155,7 @@ func (m LogViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case "down", "j":
 				m.scrollOffset++
-				filtered := m.filteredEntries()
-				if m.scrollOffset >= len(filtered) {
-					m.scrollOffset = len(filtered)
-				}
+				m.clampScroll()
 			}
 		}
 	}
@@ -167,20 +163,36 @@ func (m LogViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m LogViewModel) isAtBottom() bool {
-	filtered := m.filteredEntries()
-	viewHeight := m.height - 4
-	if viewHeight < 1 {
-		viewHeight = 10
-	}
-	if len(filtered) <= viewHeight {
-		return true
-	}
-	return m.scrollOffset >= len(filtered)
+	return m.scrollOffset >= m.maxScroll()
 }
 
 func (m *LogViewModel) scrollToBottom() {
-	filtered := m.filteredEntries()
-	m.scrollOffset = len(filtered)
+	m.scrollOffset = m.maxScroll()
+}
+
+func (m LogViewModel) viewHeight() int {
+	h := m.height - 4
+	if h < 1 {
+		h = 10
+	}
+	return h
+}
+
+func (m *LogViewModel) maxScroll() int {
+	total := len(m.renderedLines())
+	viewH := m.viewHeight()
+	ms := total - viewH
+	if ms < 0 {
+		ms = 0
+	}
+	return ms
+}
+
+func (m *LogViewModel) clampScroll() {
+	ms := m.maxScroll()
+	if m.scrollOffset > ms {
+		m.scrollOffset = ms
+	}
 }
 
 func (m *LogViewModel) filteredEntries() []claude.LogEntry {
@@ -214,77 +226,23 @@ func (m LogViewModel) View() string {
 	b.WriteString(m.renderFilterBar())
 	b.WriteString("\n\n")
 
-	// Filtered entries
-	filtered := m.filteredEntries()
-	viewHeight := m.height - 4 // Reserve space for filter bar and status
-	if viewHeight < 1 {
-		viewHeight = 10
+	lines := m.renderedLines()
+	viewH := m.viewHeight()
+
+	start := m.scrollOffset
+	if start >= len(lines) {
+		start = len(lines) - 1
+	}
+	if start < 0 {
+		start = 0
+	}
+	end := start + viewH
+	if end > len(lines) {
+		end = len(lines)
 	}
 
-	// Calculate visible range
-	start := 0
-	if len(filtered) > viewHeight {
-		if m.scrollOffset > viewHeight {
-			start = m.scrollOffset - viewHeight
-		}
-	}
-	end := start + viewHeight
-	if end > len(filtered) {
-		end = len(filtered)
-	}
-
-	for i := start; i < end; i++ {
-		entry := filtered[i]
-		levelStyle := logLevelStyle(entry.Level)
-		ts := entry.Timestamp.Format("15:04:05.000")
-		levelStr := levelStyle.Render(fmt.Sprintf("[%s]", entry.Level))
-		// Flatten multi-line messages (continuation lines) to prevent exceeding view height
-		msg := strings.ReplaceAll(entry.Message, "\n", " ")
-		b.WriteString(fmt.Sprintf("%s %s %s\n", DimStyle.Render(ts), levelStr, msg))
-	}
-
-	b.WriteString(HelpStyle.Render(fmt.Sprintf("\n%d entries", len(filtered))))
+	b.WriteString(strings.Join(lines[start:end], "\n"))
+	b.WriteString(HelpStyle.Render(fmt.Sprintf("\n%d entries", len(m.filteredEntries()))))
 
 	return b.String()
-}
-
-func (m LogViewModel) renderFilterBar() string {
-	items := make([]FilterItem, len(logFilterDefs))
-	for i, f := range logFilterDefs {
-		items[i] = FilterItem{
-			Label:  f.label,
-			Active: m.filterLevels[f.level],
-		}
-	}
-
-	filterBar := RenderFilterBar(items, m.filterCursor)
-
-	if m.searching {
-		filterBar += "  Search: " + m.searchInput.View()
-	} else if m.searchQuery != "" {
-		filterBar += "  Search: " + m.searchQuery
-	}
-
-	return filterBar
-}
-
-func logLevelStyle(level claude.LogLevel) lipgloss.Style {
-	switch level {
-	case claude.LevelDEBUG:
-		return LogLevelDEBUG
-	case claude.LevelERROR:
-		return LogLevelERROR
-	case claude.LevelWARN:
-		return LogLevelWARN
-	case claude.LevelMCP:
-		return LogLevelMCP
-	case claude.LevelSTARTUP:
-		return LogLevelSTARTUP
-	case claude.LevelMETA:
-		return LogLevelMETA
-	case claude.LevelATTACHMENT:
-		return LogLevelATTACHMENT
-	default:
-		return LogLevelDEBUG
-	}
 }
